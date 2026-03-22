@@ -1,0 +1,38 @@
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+const api = axios.create({
+    baseURL: API_URL,
+    headers: {
+        'Content-Type': 'application/json',
+    },
+});
+
+// Interceptor para inyectar token JWT
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
+// Auth
+export const loginUser = (email, password) => api.post('/auth/login', { email, password });
+
+// Hotels
+export const getHotels = () => api.get('/hotels');
+export const getHotelById = (id) => api.get(`/hotels/${id}`);
+
+// Guests & Reservations
+export const getGuests = (hotel_id) => api.get(`/guests`, { params: { hotel_id } });
+export const getReservations = (hotel_id) => api.get(`/reservations`, { params: { hotel_id } });
+
+// Services
+export const getServices = (hotel_id) => api.get(`/services`, { params: { hotel_id } });
+
+// Analytics
+export const getAnalytics = (hotel_id) => api.get('/analytics', { params: { hotel_id } });
+
+export default api;
