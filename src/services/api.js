@@ -22,8 +22,9 @@ api.interceptors.request.use((config) => {
 export const loginUser = (email, password) => api.post('/auth/login', { email, password });
 
 // Hotels
+export const createHotel = (data) => api.post('/hotels', data);
 export const getHotels = () => api.get('/hotels');
-export const getHotelById = (id) => api.get(`/hotels/${id}`);
+export const getHotel = (id) => api.get(`/hotels/${id}`);
 
 // Guests & Reservations
 export const getGuests = (hotel_id) => api.get(`/guests`, { params: { hotel_id } });

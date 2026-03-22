@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { getHotels } from "../services/api";
+import { getHotels, createHotel } from "../services/api";
 
 // ============================================================
 // DESIGN SYSTEM - Luxury SaaS, dark mode, sharp accents
@@ -450,9 +450,40 @@ function HotelDetail({ hotel, onBack }) {
 
 function OnboardingView({ onComplete }) {
   const [step, setStep] = useState(1);
-  const [data, setData] = useState({ name: "", location: "", whatsapp: "", plan: "pro", services: [], check_in: "15:00", check_out: "11:00" });
+  const [data, setData] = useState({ name: "", location: "", whatsapp: "", plan: "pro", provider: "mock", evolution_url: "https://evolution.serstormia.cloud", evolution_apikey: "", services: [], check_in: "15:00", check_out: "11:00" });
+  const [submitting, setSubmitting] = useState(false);
+  const [qrCode, setQrCode] = useState(null);
 
   const update = (k, v) => setData(prev => ({ ...prev, [k]: v }));
+
+  const handleFinalSubmit = async () => {
+    try {
+      setSubmitting(true);
+      const res = await createHotel({
+        ...data,
+        upsell_prices: {
+          transfer: data.transfer_price,
+          early_checkin: data.early_checkin_price,
+          restaurant: data.restaurant_price,
+          spa: data.spa_price,
+          massage: data.massage_price,
+          yoga: data.yoga_price,
+          late_checkout: data.late_checkout_price
+        }
+      });
+      if (res.data.qr_code) {
+        setQrCode(res.data.qr_code);
+      } else {
+        onComplete();
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Error al guardar el hotel. Revise la consola.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
 
   const stepContent = {
     1: (
@@ -532,34 +563,41 @@ function OnboardingView({ onComplete }) {
       <div className="col gap20">
         <div className="col gap4">
           <div className="syne" style={{ fontSize: 22, fontWeight: 800 }}>Conectar WhatsApp</div>
-          <p style={{ color: "var(--text2)", fontSize: 14 }}>Dos opciones: Twilio (fácil) o Meta Business API (producción)</p>
+          <p style={{ color: "var(--text2)", fontSize: 14 }}>Conectate usando tu propia infraestructura de Evolution API o usa el modo simulado de IA.</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          {[
-            { id: "twilio", name: "Twilio", desc: "Más fácil, ideal para empezar. WhatsApp Sandbox disponible.", color: "#ef4444", steps: ["Crear cuenta en twilio.com", "Activar WhatsApp Sandbox", "Pegar Account SID y Auth Token"] },
-            { id: "meta", name: "Meta Business API", desc: "Certificado Meta Tech Provider. Producción, sin riesgo de bloqueos.", color: "#3b82f6", steps: ["App en developers.facebook.com", "Verificar número de teléfono", "Configurar webhook URL"] },
-          ].map(opt => (
-            <div key={opt.id} onClick={() => update("provider", opt.id)}
-              className="card col gap12"
-              style={{ cursor: "pointer", borderColor: data.provider === opt.id ? opt.color : "var(--border)", transition: "all 0.2s" }}>
-              <div className="row between center">
-                <div className="syne" style={{ fontWeight: 700, fontSize: 15, color: opt.color }}>{opt.name}</div>
-                {data.provider === opt.id && <span className="badge badge-green">Seleccionado ✓</span>}
-              </div>
-              <p style={{ fontSize: 12, color: "var(--text2)" }}>{opt.desc}</p>
-              {opt.steps.map((s, i) => <div key={i} style={{ fontSize: 12, color: "var(--text3)" }}>{i + 1}. {s}</div>)}
+          <div onClick={() => update("provider", "evolution")}
+            className="card col gap12"
+            style={{ cursor: "pointer", borderColor: data.provider === "evolution" ? "#10b981" : "var(--border)", transition: "all 0.2s" }}>
+            <div className="row between center">
+              <div className="syne" style={{ fontWeight: 700, fontSize: 15, color: "#10b981" }}>Evolution API</div>
+              {data.provider === "evolution" && <span className="badge badge-green">Seleccionado ✓</span>}
             </div>
-          ))}
-        </div>
-        <div className="card" style={{ borderColor: "rgba(16,185,129,0.3)" }}>
-          <div className="row gap10 center" style={{ marginBottom: 12 }}>
-            <span style={{ fontSize: 18 }}>🧪</span>
-            <div className="syne" style={{ fontWeight: 700, fontSize: 14 }}>Modo simulación (recomendado para empezar)</div>
+            <p style={{ fontSize: 12, color: "var(--text2)" }}>Sincronización vía Baileys mediante código QR.</p>
+            
+            {data.provider === "evolution" && (
+              <div className="col gap10 fade-in" style={{ marginTop: 8 }} onClick={e => e.stopPropagation()}>
+                <div>
+                  <label style={{ fontSize: 10, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase" }}>URL de tu servidor Evolution</label>
+                  <input style={{ padding: "6px 10px", marginTop: 4 }} value={data.evolution_url} onChange={e => update("evolution_url", e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 10, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase" }}>Global API Key</label>
+                  <input style={{ padding: "6px 10px", marginTop: 4 }} type="password" value={data.evolution_apikey} onChange={e => update("evolution_apikey", e.target.value)} placeholder="Ej: 6CA641D0289A..." />
+                </div>
+              </div>
+            )}
           </div>
-          <p style={{ fontSize: 13, color: "var(--text2)", marginBottom: 12 }}>Probá el bot sin conectar WhatsApp. Simulá mensajes via API y ve las respuestas en la consola.</p>
-          <button className="btn-primary" onClick={() => update("provider", "mock")} style={{ background: "var(--green)" }}>
-            {data.provider === "mock" ? "✓ Modo mock activo" : "Usar modo simulación"}
-          </button>
+
+          <div onClick={() => update("provider", "mock")}
+            className="card col gap12"
+            style={{ cursor: "pointer", borderColor: data.provider === "mock" ? "var(--purple)" : "var(--border)", transition: "all 0.2s" }}>
+            <div className="row between center">
+              <div className="syne" style={{ fontWeight: 700, fontSize: 15, color: "var(--purple)" }}>Modo Simulación</div>
+              {data.provider === "mock" && <span className="badge badge-purple">Seleccionado ✓</span>}
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text2)" }}>Probá el bot sin conectar un teléfono real. Los mensajes se simulan vía API (CURL o ThunderClient).</p>
+          </div>
         </div>
       </div>
     ),
@@ -572,9 +610,7 @@ function OnboardingView({ onComplete }) {
           <div className="syne" style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>Resumen de configuración</div>
           {[
             ["Hotel", data.name || "—"],
-            ["Ubicación", data.location || "—"],
             ["WhatsApp", data.whatsapp || "—"],
-            ["Plan", (data.plan || "pro").toUpperCase()],
             ["Conexión", (data.provider || "mock").toUpperCase()],
           ].map(([k, v]) => (
             <div key={k} className="row between" style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
@@ -583,9 +619,23 @@ function OnboardingView({ onComplete }) {
             </div>
           ))}
         </div>
-        <div className="row gap12">
-          <button className="btn-primary" onClick={onComplete} style={{ padding: "12px 28px", fontSize: 15 }}>Ir al panel del hotel →</button>
-        </div>
+
+        {qrCode ? (
+          <div className="col gap12 center fade-in" style={{ marginTop: 20 }}>
+            <div className="syne" style={{ fontSize: 18, color: "var(--green)", fontWeight: 700 }}>Hotel Guardado. ¡Escanea el QR!</div>
+            <p style={{ fontSize: 13, color: "var(--text2)" }}>Abre WhatsApp en el celular del hotel, ve a Dispositivos Vinculados y escanea este código mágico.</p>
+            <div style={{ background: "#fff", padding: 16, borderRadius: 12 }}>
+              <img src={qrCode} alt="WhatsApp QR" style={{ width: 240, height: 240 }} />
+            </div>
+            <button className="btn-primary" onClick={onComplete} style={{ marginTop: 10 }}>Finalizar y Ver CRM →</button>
+          </div>
+        ) : (
+          <div className="row gap12" style={{ marginTop: 20 }}>
+            <button className="btn-primary" onClick={handleFinalSubmit} disabled={submitting} style={{ padding: "12px 28px", fontSize: 15 }}>
+              {submitting ? "Guardando hotel..." : "Conectar y Finalizar →"}
+            </button>
+          </div>
+        )}
         <div className="card col gap10" style={{ width: "100%", maxWidth: 480, background: "rgba(37,99,235,0.08)", borderColor: "rgba(37,99,235,0.2)" }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "var(--accent2)" }}>Próximo paso: probar el bot</div>
           <div className="mono" style={{ fontSize: 11, color: "var(--text3)", wordBreak: "break-all" }}>
