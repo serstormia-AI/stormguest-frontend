@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { getHotelById, getAnalytics, getReservations, getServices } from "../services/api";
+import { getHotel, getAnalytics, getReservations, getServices } from "../services/api";
 
 // ============================================================
 // SER STORM AI SOLUTIONS — HOTEL MANAGER PANEL
@@ -750,7 +750,7 @@ export default function StormGuestHotelPanel() {
         const hid = localStorage.getItem('hotel_id') || 'h1';
 
         Promise.all([
-            getHotelById(hid),
+            getHotel(hid),
             getAnalytics(hid),
             getReservations(hid),
             getServices(hid)
