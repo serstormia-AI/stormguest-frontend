@@ -450,7 +450,7 @@ function HotelDetail({ hotel, onBack }) {
 
 function OnboardingView({ onComplete }) {
   const [step, setStep] = useState(1);
-  const [data, setData] = useState({ name: "", location: "", whatsapp: "", plan: "pro", provider: "mock", evolution_url: "https://evolution.serstormia.cloud", evolution_apikey: "", services: [], check_in: "15:00", check_out: "11:00" });
+  const [data, setData] = useState({ name: "", location: "", whatsapp: "", plan: "pro", provider: "mock", evolution_url: "https://evolution.serstormia.cloud", evolution_apikey: import.meta.env.VITE_EVOLUTION_API_KEY || "", services: [], check_in: "15:00", check_out: "11:00" });
   const [submitting, setSubmitting] = useState(false);
   const [qrCode, setQrCode] = useState(null);
 
