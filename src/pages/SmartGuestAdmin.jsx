@@ -219,7 +219,7 @@ function HotelRow({ hotel, onSelect }) {
 // VIEWS
 // ============================================================
 
-function DashboardView({ hotels }) {
+function DashboardView({ hotels, setView }) {
   const m = MOCK_METRICS;
   return (
     <div className="fade-in col gap24">
@@ -242,7 +242,7 @@ function DashboardView({ hotels }) {
           <div style={{ fontSize: 11, color: "var(--text3)", display: "grid", gridTemplateColumns: "2fr 1.2fr 1fr 1fr 1fr 1fr 80px", padding: "10px 20px", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, borderBottom: "1px solid var(--border)" }}>
             <span>Hotel</span><span>Estado</span><span>Plan</span><span>Revenue/mes</span><span>Huéspedes</span><span>Bot</span><span></span>
           </div>
-          {hotels.map(h => <HotelRow key={h.id} hotel={h} onSelect={() => { }} />)}
+          {hotels.map(h => <HotelRow key={h.id} hotel={h} onSelect={() => setView('hotels')} />)}
         </div>
 
         {/* Actividad en tiempo real */}
@@ -865,7 +865,7 @@ export default function SmartGuestAdmin() {
 
         {/* Content */}
         <div style={{ flex: 1, overflow: "auto", padding: 28 }}>
-          {view === "dashboard" && <DashboardView hotels={hotels} />}
+          {view === "dashboard" && <DashboardView hotels={hotels} setView={setView} />}
           {view === "hotels" && <HotelsView hotels={hotels} onOnboard={() => setOnboarding(true)} />}
           {view === "billing" && <BillingView hotels={hotels} />}
         </div>
