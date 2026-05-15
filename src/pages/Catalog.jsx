@@ -1,0 +1,162 @@
+import React, { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { Plus, Edit2, Trash2, Save, X, Loader2 } from 'lucide-react';
+
+export default function Catalog() {
+    const [experiences, setExperiences] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [editingId, setEditingId] = useState(null);
+    const [editForm, setEditForm] = useState({});
+
+    useEffect(() => {
+        fetchExperiences();
+    }, []);
+
+    const fetchExperiences = async () => {
+        setLoading(true);
+        // We simulate the admin is logged in as the 'demo' hotel
+        const { data: hotelData } = await supabase
+            .from('hotels')
+            .select('id')
+            .eq('slug', 'demo')
+            .single();
+
+        if (hotelData) {
+            const { data } = await supabase
+                .from('experiences')
+                .select('*')
+                .eq('hotel_id', hotelData.id)
+                .order('created_at', { ascending: false });
+            
+            if (data) setExperiences(data);
+        }
+        setLoading(false);
+    };
+
+    const startEditing = (exp) => {
+        setEditingId(exp.id);
+        setEditForm(exp);
+    };
+
+    const saveEdit = async () => {
+        const { error } = await supabase
+            .from('experiences')
+            .update({ 
+                title: editForm.title, 
+                price: editForm.price,
+                description: editForm.description
+            })
+            .eq('id', editingId);
+
+        if (!error) {
+            setExperiences(experiences.map(e => e.id === editingId ? editForm : e));
+            setEditingId(null);
+        } else {
+            alert("Error al guardar: " + error.message);
+        }
+    };
+
+    return (
+        <div className="p-8">
+            <div className="flex justify-between items-center mb-8">
+                <div>
+                    <h1 className="text-2xl font-bold">Gestión de Catálogo</h1>
+                    <p className="text-zinc-400 mt-1">Administra las experiencias y upsells que ven los huéspedes.</p>
+                </div>
+                <button className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2 transition-colors">
+                    <Plus className="w-4 h-4" />
+                    <span>Nuevo Upsell</span>
+                </button>
+            </div>
+
+            {loading ? (
+                <div className="flex justify-center py-20">
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+                </div>
+            ) : (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                    <table className="w-full text-left">
+                        <thead className="bg-zinc-950/50 border-b border-zinc-800 text-xs uppercase tracking-wider text-zinc-500 font-semibold">
+                            <tr>
+                                <th className="px-6 py-4">Imagen</th>
+                                <th className="px-6 py-4">Título</th>
+                                <th className="px-6 py-4">Descripción</th>
+                                <th className="px-6 py-4">Precio</th>
+                                <th className="px-6 py-4 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800">
+                            {experiences.map((exp) => (
+                                <tr key={exp.id} className="hover:bg-zinc-800/50 transition-colors">
+                                    <td className="px-6 py-4">
+                                        <div className="w-16 h-12 rounded-lg bg-zinc-800 overflow-hidden">
+                                            <img src={exp.image_url} alt={exp.title} className="w-full h-full object-cover" />
+                                        </div>
+                                    </td>
+                                    
+                                    {editingId === exp.id ? (
+                                        <>
+                                            <td className="px-6 py-4">
+                                                <input 
+                                                    type="text" 
+                                                    value={editForm.title}
+                                                    onChange={e => setEditForm({...editForm, title: e.target.value})}
+                                                    className="bg-zinc-950 border border-zinc-700 rounded px-3 py-1 w-full text-sm outline-none focus:border-emerald-500"
+                                                />
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <input 
+                                                    type="text" 
+                                                    value={editForm.description}
+                                                    onChange={e => setEditForm({...editForm, description: e.target.value})}
+                                                    className="bg-zinc-950 border border-zinc-700 rounded px-3 py-1 w-full text-sm outline-none focus:border-emerald-500"
+                                                />
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <input 
+                                                    type="number" 
+                                                    value={editForm.price}
+                                                    onChange={e => setEditForm({...editForm, price: e.target.value})}
+                                                    className="bg-zinc-950 border border-zinc-700 rounded px-3 py-1 w-24 text-sm outline-none focus:border-emerald-500"
+                                                />
+                                            </td>
+                                            <td className="px-6 py-4 text-right space-x-2 flex justify-end">
+                                                <button onClick={saveEdit} className="p-2 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded transition-colors">
+                                                    <Save className="w-4 h-4" />
+                                                </button>
+                                                <button onClick={() => setEditingId(null)} className="p-2 bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white rounded transition-colors">
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </td>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <td className="px-6 py-4 font-medium text-zinc-200">{exp.title}</td>
+                                            <td className="px-6 py-4 text-zinc-400 text-sm max-w-xs truncate">{exp.description}</td>
+                                            <td className="px-6 py-4 font-bold text-emerald-400">${exp.price} {exp.currency}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button onClick={() => startEditing(exp)} className="p-2 text-zinc-500 hover:text-emerald-400 transition-colors">
+                                                    <Edit2 className="w-4 h-4" />
+                                                </button>
+                                                <button className="p-2 text-zinc-500 hover:text-red-400 transition-colors">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </td>
+                                        </>
+                                    )}
+                                </tr>
+                            ))}
+                            {experiences.length === 0 && (
+                                <tr>
+                                    <td colSpan="5" className="px-6 py-8 text-center text-zinc-500">
+                                        No hay experiencias configuradas. Haz clic en "Nuevo Upsell".
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
