@@ -79,8 +79,7 @@ function Layout({ children }) {
                         <div className="flex items-center space-x-3 bg-zinc-900/50 px-3 py-1.5 rounded-lg border border-zinc-800">
                             <span className="text-sm text-zinc-400">Hotel Activo:</span>
                             <select className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer">
-                                <option value="demo">Hotel Interamericano</option>
-                                <option value="llaollao">Llao Llao Resort</option>
+                                <option value="demo">Hotel Demo</option>
                             </select>
                         </div>
 
