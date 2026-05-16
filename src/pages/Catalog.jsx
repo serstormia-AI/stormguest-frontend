@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Plus, Edit2, Trash2, Save, X, Loader2, ImageIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Loader2, ImageIcon, ShoppingCart } from 'lucide-react';
 import ImageUpload from '../components/ImageUpload';
+import { createCheckout } from '../services/api';
 
 export default function Catalog() {
     const [experiences, setExperiences] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState(null);
     const [editForm, setEditForm] = useState({});
+    const [buyingExp, setBuyingExp] = useState(null);
+    const [buyForm, setBuyForm] = useState({ guest_name: '', guest_email: '' });
+    const [buyLoading, setBuyLoading] = useState(false);
 
     useEffect(() => {
         fetchExperiences();
@@ -37,6 +41,34 @@ export default function Catalog() {
     const startEditing = (exp) => {
         setEditingId(exp.id);
         setEditForm(exp);
+    };
+
+    const openBuyModal = (exp) => {
+        setBuyingExp(exp);
+        setBuyForm({ guest_name: '', guest_email: '' });
+    };
+
+    const handleBuy = async () => {
+        if (!buyForm.guest_name || !buyForm.guest_email) return;
+        setBuyLoading(true);
+        try {
+            const { data: hotelData } = await supabase
+                .from('hotels')
+                .select('id')
+                .eq('slug', 'demo')
+                .single();
+
+            const { url } = await createCheckout({
+                service_id: buyingExp.id,
+                guest_name: buyForm.guest_name,
+                guest_email: buyForm.guest_email,
+                hotel_id: hotelData.id,
+            });
+            window.location.href = url;
+        } catch (err) {
+            alert('Error al procesar el pago: ' + (err.response?.data?.error || err.message));
+            setBuyLoading(false);
+        }
     };
 
     const saveEdit = async () => {
@@ -152,7 +184,10 @@ export default function Catalog() {
                                             <td className="px-6 py-4 font-medium text-zinc-200">{exp.title}</td>
                                             <td className="px-6 py-4 text-zinc-400 text-sm max-w-xs truncate">{exp.description}</td>
                                             <td className="px-6 py-4 font-bold text-emerald-400">${exp.price} {exp.currency}</td>
-                                            <td className="px-6 py-4 text-right">
+                                            <td className="px-6 py-4 text-right flex justify-end items-center gap-1">
+                                                <button onClick={() => openBuyModal(exp)} className="p-2 text-zinc-500 hover:text-emerald-400 transition-colors" title="Comprar">
+                                                    <ShoppingCart className="w-4 h-4" />
+                                                </button>
                                                 <button onClick={() => startEditing(exp)} className="p-2 text-zinc-500 hover:text-emerald-400 transition-colors">
                                                     <Edit2 className="w-4 h-4" />
                                                 </button>
@@ -173,6 +208,71 @@ export default function Catalog() {
                             )}
                         </tbody>
                     </table>
+                </div>
+            )}
+
+            {buyingExp && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6">
+                        <div className="flex justify-between items-start mb-6">
+                            <div>
+                                <h2 className="text-lg font-bold">Comprar servicio</h2>
+                                <p className="text-zinc-400 text-sm mt-1">{buyingExp.title} — <span className="text-emerald-400 font-bold">${buyingExp.price} {buyingExp.currency}</span></p>
+                            </div>
+                            <button onClick={() => setBuyingExp(null)} className="text-zinc-500 hover:text-white transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm text-zinc-400 mb-1">Nombre del huésped</label>
+                                <input
+                                    type="text"
+                                    value={buyForm.guest_name}
+                                    onChange={e => setBuyForm({ ...buyForm, guest_name: e.target.value })}
+                                    placeholder="Juan García"
+                                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition-colors"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-zinc-400 mb-1">Email del huésped</label>
+                                <input
+                                    type="email"
+                                    value={buyForm.guest_email}
+                                    onChange={e => setBuyForm({ ...buyForm, guest_email: e.target.value })}
+                                    placeholder="juan@example.com"
+                                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition-colors"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 mt-6">
+                            <button
+                                onClick={() => setBuyingExp(null)}
+                                className="flex-1 py-2.5 rounded-lg border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors text-sm"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleBuy}
+                                disabled={buyLoading || !buyForm.guest_name || !buyForm.guest_email}
+                                className="flex-1 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                            >
+                                {buyLoading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Procesando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <ShoppingCart className="w-4 h-4" />
+                                        Ir a pagar
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

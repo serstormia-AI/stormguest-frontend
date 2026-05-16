@@ -36,4 +36,20 @@ export const getServices = (hotel_id) => api.get(`/services`, { params: { hotel_
 // Analytics
 export const getAnalytics = (hotel_id) => api.get('/analytics', { params: { hotel_id } });
 
+// Reviews
+export const getReviews = () => api.get('/reviews');
+export const createReview = (data) => api.post('/reviews', data);
+export const deleteReview = (id) => api.delete(`/reviews/${id}`);
+
+// Payments
+export async function createCheckout(data) {
+    const response = await api.post('/payments/checkout', data);
+    return response.data;
+}
+
+export async function getOrders() {
+    const response = await api.get('/payments/orders');
+    return response.data;
+}
+
 export default api;
