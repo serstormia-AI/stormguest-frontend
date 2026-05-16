@@ -7,6 +7,7 @@ import Catalog from './pages/Catalog';
 import CheckIns from './pages/CheckIns';
 import Chat from './pages/Chat';
 import Requests from './pages/Requests';
+import Dashboard from './pages/Dashboard';
 
 // ── Auth helpers ──────────────────────────────────────────────
 function getAuth() {
@@ -28,17 +29,6 @@ function logout() {
 function PrivateRoute({ children }) {
   const { token } = getAuth();
   return token ? children : <Navigate to="/login" replace />;
-}
-
-// ── Dashboard placeholder ─────────────────────────────────────
-function Dashboard() {
-  const name = localStorage.getItem('name') || 'Admin';
-  return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-white mb-2">Bienvenido, {name}</h1>
-      <p className="text-zinc-400">Seleccioná una sección del menú para comenzar.</p>
-    </div>
-  );
 }
 
 // ── Layout principal ──────────────────────────────────────────

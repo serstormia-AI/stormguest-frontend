@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Plus, Edit2, Trash2, Save, X, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Loader2, ImageIcon } from 'lucide-react';
+import ImageUpload from '../components/ImageUpload';
 
 export default function Catalog() {
     const [experiences, setExperiences] = useState([]);
@@ -41,10 +42,11 @@ export default function Catalog() {
     const saveEdit = async () => {
         const { error } = await supabase
             .from('experiences')
-            .update({ 
-                title: editForm.title, 
+            .update({
+                title: editForm.title,
                 price: editForm.price,
-                description: editForm.description
+                description: editForm.description,
+                image_url: editForm.image_url ?? null
             })
             .eq('id', editingId);
 
@@ -88,17 +90,19 @@ export default function Catalog() {
                         <tbody className="divide-y divide-zinc-800">
                             {experiences.map((exp) => (
                                 <tr key={exp.id} className="hover:bg-zinc-800/50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="w-16 h-12 rounded-lg bg-zinc-800 overflow-hidden">
-                                            <img src={exp.image_url} alt={exp.title} className="w-full h-full object-cover" />
-                                        </div>
-                                    </td>
-                                    
                                     {editingId === exp.id ? (
                                         <>
+                                            {/* Image upload cell in edit mode */}
                                             <td className="px-6 py-4">
-                                                <input 
-                                                    type="text" 
+                                                <ImageUpload
+                                                    currentUrl={editForm.image_url}
+                                                    folder="experiences"
+                                                    onUpload={(url) => setEditForm({ ...editForm, image_url: url })}
+                                                />
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <input
+                                                    type="text"
                                                     value={editForm.title}
                                                     onChange={e => setEditForm({...editForm, title: e.target.value})}
                                                     className="bg-zinc-950 border border-zinc-700 rounded px-3 py-1 w-full text-sm outline-none focus:border-emerald-500"
@@ -131,6 +135,20 @@ export default function Catalog() {
                                         </>
                                     ) : (
                                         <>
+                                            {/* Thumbnail cell in view mode */}
+                                            <td className="px-6 py-4">
+                                                <div className="w-16 h-12 rounded-lg bg-zinc-800 overflow-hidden flex items-center justify-center">
+                                                    {exp.image_url ? (
+                                                        <img
+                                                            src={exp.image_url}
+                                                            alt={exp.title}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <ImageIcon className="w-5 h-5 text-zinc-600" />
+                                                    )}
+                                                </div>
+                                            </td>
                                             <td className="px-6 py-4 font-medium text-zinc-200">{exp.title}</td>
                                             <td className="px-6 py-4 text-zinc-400 text-sm max-w-xs truncate">{exp.description}</td>
                                             <td className="px-6 py-4 font-bold text-emerald-400">${exp.price} {exp.currency}</td>
