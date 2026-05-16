@@ -327,7 +327,7 @@ export default function Dashboard() {
             ) : (
               guests.map((guest) => {
                 const fullName = guest.name
-                  ?? `${guest.first_name ?? ''} ${guest.last_name ?? ''}`.trim()
+                  || `${guest.first_name || ''} ${guest.last_name || ''}`.trim()
                   || 'Huésped';
                 const phone    = guest.phone ?? guest.phone_number ?? '—';
                 const lastSeen = guest.updated_at ?? guest.created_at ?? null;
