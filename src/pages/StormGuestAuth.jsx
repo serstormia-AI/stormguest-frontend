@@ -94,31 +94,31 @@ const INJECT_STYLES = `
 // ============================================================
 const DEMO_USERS = [
   {
-    email: "admin@serstorm.com",
-    password: "storm2024",
+    email: "admin@stormguest.com",
+    password: "Storm2024!",
     role: "super_admin",
-    name: "Admin Ser Storm",
-    avatar: "SS",
+    name: "Admin",
+    avatar: "AD",
     panel: "admin",
   },
   {
-    email: "gerente@interamericano.com",
-    password: "hotel2024",
+    email: "manager@demo.com",
+    password: "Hotel2024!",
     role: "hotel_manager",
-    name: "Gerente Interamericano",
-    avatar: "GI",
-    hotel: "Hotel Interamericano",
-    hotel_id: "h1",
+    name: "Manager",
+    avatar: "MG",
+    hotel: "Hotel Demo",
+    hotel_id: "demo",
     panel: "hotel",
   },
   {
-    email: "recepcion@interamericano.com",
-    password: "recepcion2024",
+    email: "recepcion@demo.com",
+    password: "Recep2024!",
     role: "reception",
-    name: "Recepción",
+    name: "Recepcion",
     avatar: "RC",
-    hotel: "Hotel Interamericano",
-    hotel_id: "h1",
+    hotel: "Hotel Demo",
+    hotel_id: "demo",
     panel: "crm",
   }
 ];
@@ -363,9 +363,7 @@ export default function StormGuestAuth() {
     if (token && !user) {
       // Redirigimos directo si ya estaba logeado previamente en refresh
       const storedRole = localStorage.getItem('role');
-      if (storedRole === "super_admin") navigate("/admin");
-      if (storedRole === "hotel_manager") navigate("/hotel");
-      if (storedRole === "reception") navigate("/crm");
+      navigate("/");
     }
 
     const style = document.createElement("style");
@@ -383,9 +381,7 @@ export default function StormGuestAuth() {
 
   const handleContinue = () => {
     if (!user) return;
-    if (user.role === "super_admin") navigate("/admin");
-    if (user.role === "hotel_manager") navigate("/hotel");
-    if (user.role === "reception") navigate("/crm");
+    navigate("/");
   };
 
   return (
