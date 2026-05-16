@@ -52,4 +52,15 @@ export async function getOrders() {
     return response.data;
 }
 
+// Notifications
+export async function sendNotification(data) {
+    const response = await api.post('/notifications/send', data);
+    return response.data;
+}
+
+export async function testNotification() {
+    const response = await api.get('/notifications/test');
+    return response.data;
+}
+
 export default api;

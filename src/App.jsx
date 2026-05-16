@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail } from 'lucide-react';
 
 import StormGuestAuth from './pages/StormGuestAuth';
 import Catalog from './pages/Catalog';
@@ -10,6 +10,7 @@ import Requests from './pages/Requests';
 import Dashboard from './pages/Dashboard';
 import Reviews from './pages/Reviews';
 import Orders from './pages/Orders';
+import Notifications from './pages/Notifications';
 
 // ── Auth helpers ──────────────────────────────────────────────
 function getAuth() {
@@ -46,6 +47,7 @@ function Layout({ children }) {
     { name: 'Catálogo (Upsells)',     icon: Ticket,          path: '/catalog' },
     { name: 'Reseñas',               icon: Star,            path: '/reviews' },
     { name: 'Órdenes',              icon: CreditCard,      path: '/orders' },
+    { name: 'Notificaciones',       icon: Mail,            path: '/notifications' },
   ];
 
   const handleLogout = () => {
@@ -144,7 +146,8 @@ export default function App() {
         <Route path="/requests" element={<PrivateRoute><Layout><Requests /></Layout></PrivateRoute>} />
         <Route path="/catalog"  element={<PrivateRoute><Layout><Catalog /></Layout></PrivateRoute>} />
         <Route path="/reviews"  element={<PrivateRoute><Layout><Reviews /></Layout></PrivateRoute>} />
-        <Route path="/orders"   element={<PrivateRoute><Layout><Orders /></Layout></PrivateRoute>} />
+        <Route path="/orders"         element={<PrivateRoute><Layout><Orders /></Layout></PrivateRoute>} />
+        <Route path="/notifications"  element={<PrivateRoute><Layout><Notifications /></Layout></PrivateRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
