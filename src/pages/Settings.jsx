@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, RotateCcw, Eye, EyeOff, Send, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Save, RotateCcw, Eye, EyeOff, Send, Loader2, CheckCircle, AlertCircle, CreditCard } from 'lucide-react';
 import { getSettings, updateSettings, testNotification } from '../services/api';
 
 // Prompt base de Julia — mismo que el backend, para poder restaurarlo
@@ -28,6 +28,18 @@ function Spinner() {
   return <Loader2 className="w-4 h-4 animate-spin" />;
 }
 
+function ConfiguredBadge({ configured }) {
+  return configured ? (
+    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+      <CheckCircle className="w-3 h-3" /> Configurado
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500">
+      Sin configurar
+    </span>
+  );
+}
+
 export default function Settings() {
   // ── Prompt de Julia ──────────────────────────────────────────
   const [prompt, setPrompt] = useState('');
@@ -47,6 +59,19 @@ export default function Settings() {
   const [smtpTesting, setSmtpTesting] = useState(false);
   const [smtpStatus, setSmtpStatus] = useState(null); // { type, message }
 
+  // ── Stripe ────────────────────────────────────────────────────
+  const [stripe, setStripe] = useState({
+    stripe_publishable_key: '',
+    stripe_secret_key: '',
+    stripe_webhook_secret: '',
+  });
+  const [hasStripeSecret, setHasStripeSecret] = useState(false);
+  const [hasStripeWebhook, setHasStripeWebhook] = useState(false);
+  const [showStripeSecret, setShowStripeSecret] = useState(false);
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+  const [stripeSaving, setStripeSaving] = useState(false);
+  const [stripeStatus, setStripeStatus] = useState(null); // { type, message }
+
   // ── Cargar config al montar ──────────────────────────────────
   useEffect(() => {
     getSettings()
@@ -59,6 +84,13 @@ export default function Settings() {
           smtp_pass: '',          // nunca viene del servidor
           smtp_from: data.smtp_from || '',
         });
+        setStripe({
+          stripe_publishable_key: data.stripe_publishable_key || '',
+          stripe_secret_key: '',      // nunca viene del servidor
+          stripe_webhook_secret: '',  // nunca viene del servidor
+        });
+        setHasStripeSecret(!!data.has_stripe_secret);
+        setHasStripeWebhook(!!data.has_stripe_webhook);
       })
       .catch(() => {
         // Sin bloquear la UI si falla
@@ -116,6 +148,40 @@ export default function Settings() {
       setSmtpStatus({ type: 'error', message: 'Error al probar la configuración.' });
     } finally {
       setSmtpTesting(false);
+    }
+  }
+
+  // ── Guardar Stripe ───────────────────────────────────────────
+  async function handleSaveStripe() {
+    setStripeSaving(true);
+    setStripeStatus(null);
+    try {
+      const payload = {};
+      // Siempre enviamos la publicable (puede borrarse poniéndola vacía)
+      payload.stripe_publishable_key = stripe.stripe_publishable_key;
+      // Solo enviamos secretas si el usuario escribió algo
+      if (stripe.stripe_secret_key) payload.stripe_secret_key = stripe.stripe_secret_key;
+      if (stripe.stripe_webhook_secret) payload.stripe_webhook_secret = stripe.stripe_webhook_secret;
+
+      const result = await updateSettings(payload);
+
+      // Actualizar indicadores con lo que devuelve el servidor
+      if (result?.data) {
+        setHasStripeSecret(!!result.data.has_stripe_secret);
+        setHasStripeWebhook(!!result.data.has_stripe_webhook);
+        setStripe((s) => ({
+          ...s,
+          stripe_publishable_key: result.data.stripe_publishable_key || s.stripe_publishable_key,
+          stripe_secret_key: '',
+          stripe_webhook_secret: '',
+        }));
+      }
+
+      setStripeStatus({ type: 'success', message: 'Configuración de Stripe guardada correctamente.' });
+    } catch {
+      setStripeStatus({ type: 'error', message: 'Error al guardar. Verificá los datos e intentá de nuevo.' });
+    } finally {
+      setStripeSaving(false);
     }
   }
 
@@ -279,6 +345,99 @@ export default function Settings() {
           >
             {smtpTesting ? <Spinner /> : <Send className="w-4 h-4" />}
             Probar configuración
+          </button>
+        </div>
+      </div>
+
+      {/* ── Card: Stripe ── */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Configuración de Pagos (Stripe)</h2>
+            <p className="text-zinc-400 text-sm mt-0.5">
+              Conectá tu cuenta de Stripe para procesar pagos directamente desde tu hotel.
+            </p>
+          </div>
+          <div className="shrink-0 w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400">
+            <CreditCard className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4">
+          {/* Publishable Key */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-zinc-300">Stripe Publishable Key</label>
+            <input
+              type="text"
+              value={stripe.stripe_publishable_key}
+              onChange={(e) => setStripe((s) => ({ ...s, stripe_publishable_key: e.target.value }))}
+              placeholder="pk_live_... o pk_test_..."
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-violet-600 font-mono"
+            />
+          </div>
+
+          {/* Secret Key */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-zinc-300">Stripe Secret Key</label>
+              <ConfiguredBadge configured={hasStripeSecret} />
+            </div>
+            <div className="relative">
+              <input
+                type={showStripeSecret ? 'text' : 'password'}
+                value={stripe.stripe_secret_key}
+                onChange={(e) => setStripe((s) => ({ ...s, stripe_secret_key: e.target.value }))}
+                placeholder={hasStripeSecret ? 'Dejá vacío para no cambiar la clave guardada' : 'sk_live_... o sk_test_...'}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 pr-12 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-violet-600 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowStripeSecret((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                {showStripeSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Webhook Secret */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-zinc-300">Stripe Webhook Secret</label>
+              <ConfiguredBadge configured={hasStripeWebhook} />
+            </div>
+            <div className="relative">
+              <input
+                type={showWebhookSecret ? 'text' : 'password'}
+                value={stripe.stripe_webhook_secret}
+                onChange={(e) => setStripe((s) => ({ ...s, stripe_webhook_secret: e.target.value }))}
+                placeholder={hasStripeWebhook ? 'Dejá vacío para no cambiar el secret guardado' : 'whsec_...'}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 pr-12 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-violet-600 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowWebhookSecret((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                {showWebhookSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-zinc-500">
+              El webhook secret se obtiene desde el Dashboard de Stripe en la sección Webhooks.
+            </p>
+          </div>
+        </div>
+
+        <Alert type={stripeStatus?.type} message={stripeStatus?.message} />
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            onClick={handleSaveStripe}
+            disabled={stripeSaving}
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors"
+          >
+            {stripeSaving ? <Spinner /> : <Save className="w-4 h-4" />}
+            Guardar configuración Stripe
           </button>
         </div>
       </div>
