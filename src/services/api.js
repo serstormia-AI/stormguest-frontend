@@ -153,4 +153,19 @@ export async function deleteIntegration(id) {
     return response.data;
 }
 
+export async function savePollingConfig(data) {
+    const response = await api.post('/integrations/polling', data);
+    return response.data;
+}
+
+export async function pollNow(id) {
+    const response = await api.post(`/integrations/${id}/poll`);
+    return response.data;
+}
+
+export async function getSyncLogs(id, limit = 50) {
+    const response = await api.get(`/integrations/${id}/logs`, { params: { limit } });
+    return response.data;
+}
+
 export default api;

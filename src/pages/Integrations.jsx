@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Upload, Link2, Webhook, RefreshCw, Trash2,
-  CheckCircle, XCircle, AlertTriangle, Copy, ExternalLink, Plus
+  CheckCircle, XCircle, AlertTriangle, Copy, ExternalLink, Plus,
+  Server, Clock, ChevronDown, ChevronUp
 } from 'lucide-react';
 import {
   getIntegrations, importCsv, saveIcalUrl, syncIcalNow,
-  saveWebhookConfig, deleteIntegration
+  saveWebhookConfig, deleteIntegration, savePollingConfig, pollNow, getSyncLogs
 } from '../services/api';
 
 const PROVIDERS = ['cloudbeds', 'apaleo', 'beds24', 'little_hotelier', 'otro'];
@@ -48,6 +49,17 @@ export default function Integrations() {
   const [whProvider, setWhProvider] = useState('cloudbeds');
   const [whSecret, setWhSecret]     = useState('');
   const [generatedSecret, setGeneratedSecret] = useState(null);
+
+  // API Polling
+  const [pollProvider, setPollProvider]   = useState('cloudbeds');
+  const [pollApiKey, setPollApiKey]       = useState('');
+  const [pollClientId, setPollClientId]   = useState('');
+  const [pollClientSecret, setPollClientSecret] = useState('');
+  const [pollPropertyId, setPollPropertyId]     = useState('');
+
+  // Sync logs
+  const [logsOpen, setLogsOpen]   = useState(null); // integration id
+  const [logs, setLogs]           = useState([]);
 
   useEffect(() => { loadIntegrations(); }, []);
 
@@ -139,6 +151,49 @@ export default function Integrations() {
     } catch {
       show('error', 'Error al eliminar');
     }
+  }
+
+  async function handleSavePolling(e) {
+    e.preventDefault();
+    setLoad('polling', true);
+    try {
+      await savePollingConfig({
+        provider:       pollProvider,
+        api_key:        pollProvider === 'cloudbeds' ? pollApiKey    : undefined,
+        client_id:      pollProvider === 'apaleo'    ? pollClientId  : undefined,
+        client_secret:  pollProvider === 'apaleo'    ? pollClientSecret : undefined,
+        property_id:    pollPropertyId || undefined,
+      });
+      await loadIntegrations();
+      show('ok', `Polling ${pollProvider} configurado. Primera sync en <15 min.`);
+      setPollApiKey(''); setPollClientId(''); setPollClientSecret('');
+    } catch (err) {
+      show('error', err.response?.data?.error || 'Error al configurar polling');
+    } finally {
+      setLoad('polling', false);
+    }
+  }
+
+  async function handlePollNow(id) {
+    setLoad(`poll_${id}`, true);
+    try {
+      await pollNow(id);
+      show('ok', 'Polling completado');
+      loadIntegrations();
+    } catch (err) {
+      show('error', err.response?.data?.error || 'Error al ejecutar polling');
+    } finally {
+      setLoad(`poll_${id}`, false);
+    }
+  }
+
+  async function toggleLogs(id) {
+    if (logsOpen === id) { setLogsOpen(null); return; }
+    setLogsOpen(id);
+    try {
+      const data = await getSyncLogs(id);
+      setLogs(data || []);
+    } catch { setLogs([]); }
   }
 
   const webhookUrl = (slug) =>
@@ -307,32 +362,111 @@ export default function Integrations() {
         )}
       </Section>
 
+      {/* API Polling — Cloudbeds / Apaleo */}
+      <Section icon={Server} title="API Polling (Cloudbeds / Apaleo)">
+        <p className="text-zinc-400 text-sm">
+          Para PMS con API REST. StormGuest consulta automáticamente cada 15 minutos y reconcilia reservas.
+          Las credenciales se guardan encriptadas con AES-256-GCM.
+        </p>
+        <form onSubmit={handleSavePolling} className="space-y-3">
+          <select value={pollProvider} onChange={e => setPollProvider(e.target.value)}
+            className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-emerald-500">
+            <option value="cloudbeds">Cloudbeds</option>
+            <option value="apaleo">Apaleo</option>
+          </select>
+
+          {pollProvider === 'cloudbeds' && (
+            <input value={pollApiKey} onChange={e => setPollApiKey(e.target.value)}
+              placeholder="API Key de Cloudbeds"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 placeholder:text-zinc-600" />
+          )}
+          {pollProvider === 'apaleo' && (<>
+            <input value={pollClientId} onChange={e => setPollClientId(e.target.value)}
+              placeholder="Client ID"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 placeholder:text-zinc-600" />
+            <input value={pollClientSecret} onChange={e => setPollClientSecret(e.target.value)}
+              type="password" placeholder="Client Secret"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 placeholder:text-zinc-600" />
+          </>)}
+
+          <div className="flex gap-3">
+            <input value={pollPropertyId} onChange={e => setPollPropertyId(e.target.value)}
+              placeholder="Property ID (opcional)"
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 placeholder:text-zinc-600" />
+            <button type="submit" disabled={loading.polling}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg text-sm transition-colors disabled:opacity-50">
+              {loading.polling ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Guardar
+            </button>
+          </div>
+        </form>
+      </Section>
+
       {/* Integraciones activas */}
       {integrations.length > 0 && (
         <Section icon={ExternalLink} title="Integraciones configuradas">
           <div className="space-y-2">
             {integrations.map(i => (
-              <div key={i.id} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <Badge active={i.active} />
-                  <div>
-                    <p className="text-white text-sm font-medium capitalize">
-                      {i.type} {i.provider ? `— ${i.provider}` : ''}
-                    </p>
-                    {i.last_sync && (
-                      <p className="text-zinc-500 text-xs">
-                        Última sync: {new Date(i.last_sync).toLocaleString('es-AR')}
+              <div key={i.id} className="bg-zinc-800/50 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between p-3">
+                  <div className="flex items-center gap-3">
+                    <Badge active={i.active} />
+                    <div>
+                      <p className="text-white text-sm font-medium capitalize">
+                        {i.type === 'api_polling' ? 'API Polling' : i.type} {i.provider ? `— ${i.provider}` : ''}
                       </p>
+                      {i.last_sync && (
+                        <p className="text-zinc-500 text-xs flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {new Date(i.last_sync).toLocaleString('es-AR')}
+                        </p>
+                      )}
+                      {i.last_error && (
+                        <p className="text-red-400 text-xs">Error: {i.last_error}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {i.type === 'api_polling' && (
+                      <button onClick={() => handlePollNow(i.id)} disabled={loading[`poll_${i.id}`]}
+                        className="text-xs px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50">
+                        {loading[`poll_${i.id}`] ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                        Sync
+                      </button>
                     )}
-                    {i.last_error && (
-                      <p className="text-red-400 text-xs">Error: {i.last_error}</p>
-                    )}
+                    <button onClick={() => toggleLogs(i.id)}
+                      className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                      {logsOpen === i.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                    <button onClick={() => handleDelete(i.id)}
+                      className="text-zinc-600 hover:text-red-400 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-                <button onClick={() => handleDelete(i.id)}
-                  className="text-zinc-600 hover:text-red-400 transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
+
+                {/* Sync logs expandibles */}
+                {logsOpen === i.id && (
+                  <div className="border-t border-zinc-700/50 p-3 space-y-1 max-h-48 overflow-y-auto">
+                    {logs.length === 0
+                      ? <p className="text-zinc-600 text-xs text-center py-2">Sin logs registrados</p>
+                      : logs.map(l => (
+                          <div key={l.id} className="flex items-center gap-2 text-xs">
+                            {l.action === 'error'
+                              ? <XCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
+                              : l.action === 'created'
+                              ? <CheckCircle className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                              : <div className="w-3 h-3 rounded-full bg-zinc-600 flex-shrink-0" />}
+                            <span className="text-zinc-400">{new Date(l.synced_at).toLocaleTimeString('es-AR')}</span>
+                            <span className={`capitalize ${l.action === 'error' ? 'text-red-400' : l.action === 'created' ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                              {l.action}
+                            </span>
+                            {l.external_id && <span className="text-zinc-600">#{l.external_id}</span>}
+                            {l.detail?.error && <span className="text-red-400 truncate">{l.detail.error}</span>}
+                          </div>
+                        ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
