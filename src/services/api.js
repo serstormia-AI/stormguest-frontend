@@ -168,4 +168,9 @@ export async function getSyncLogs(id, limit = 50) {
     return response.data;
 }
 
+export async function getIntegrationsHealth() {
+    const response = await api.get('/integrations/health');
+    return response.data;
+}
+
 export default api;

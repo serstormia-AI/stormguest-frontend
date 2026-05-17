@@ -1,10 +1,12 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-    Building2, Users, Plus, Pencil, Trash2, X, ChevronDown, Loader2, AlertCircle
+    Building2, Users, Plus, Pencil, Trash2, X, ChevronDown, Loader2, AlertCircle,
+    CheckCircle, Upload, Link2, Server, Webhook, ArrowRight, ArrowLeft, Plug
 } from 'lucide-react';
 import {
     adminGetHotels, adminCreateHotel, adminUpdateHotel, adminDeleteHotel,
     adminGetUsers, adminCreateUser, adminUpdateUser, adminDeleteUser,
+    saveIcalUrl, saveWebhookConfig, savePollingConfig, importCsv,
 } from '../services/api';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -83,6 +85,278 @@ function Field({ label, children }) {
 
 const inputCls = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500 transition-colors";
 const selectCls = `${inputCls} appearance-none cursor-pointer`;
+
+// ─── Onboarding Wizard (solo para hoteles nuevos) ────────────────────────────
+
+const PMS_OPTIONS = [
+  { id: 'cloudbeds',      label: 'Cloudbeds',       icon: Server,   desc: 'API polling + webhook' },
+  { id: 'apaleo',         label: 'Apaleo',           icon: Server,   desc: 'API polling + webhook' },
+  { id: 'ical',           label: 'Beds24 / iCal',    icon: Link2,    desc: 'Sincronización por iCal' },
+  { id: 'webhook',        label: 'Webhook genérico',  icon: Webhook,  desc: 'Cualquier PMS con webhooks' },
+  { id: 'csv',            label: 'Importar CSV',      icon: Upload,   desc: 'Carga manual de reservas' },
+  { id: 'none',           label: 'Sin PMS',           icon: Building2, desc: 'Carga manual desde el panel' },
+];
+
+function StepIndicator({ current, total }) {
+  return (
+    <div className="flex items-center gap-1.5 mb-6">
+      {Array.from({ length: total }).map((_, i) => (
+        <div key={i} className={`h-1.5 rounded-full flex-1 transition-colors ${i <= current ? 'bg-emerald-500' : 'bg-zinc-700'}`} />
+      ))}
+    </div>
+  );
+}
+
+function OnboardingWizard({ onClose, onDone }) {
+  const [step, setStep]         = useState(0); // 0=hotel info, 1=pms, 2=config, 3=done
+  const [hotelId, setHotelId]   = useState(null);
+  const [hotelSlug, setHotelSlug] = useState('');
+  const [pms, setPms]           = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
+
+  // Step 0
+  const [name, setName]         = useState('');
+  const [slug, setSlug]         = useState('');
+  const [slugManual, setSlugManual] = useState(false);
+
+  // Step 2 — config fields
+  const [icalUrl, setIcalUrl]           = useState('');
+  const [apiKey, setApiKey]             = useState('');
+  const [clientId, setClientId]         = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [propertyId, setPropertyId]     = useState('');
+  const [whSecret, setWhSecret]         = useState('');
+  const fileRef = useRef();
+  const [csvResult, setCsvResult]       = useState(null);
+
+  function handleNameChange(e) {
+    const val = e.target.value;
+    setName(val);
+    if (!slugManual) setSlug(slugify(val));
+  }
+
+  async function handleCreateHotel(e) {
+    e.preventDefault();
+    setError('');
+    if (!name.trim() || !slug.trim()) return setError('Nombre y slug son requeridos');
+    setLoading(true);
+    try {
+      const hotel = await adminCreateHotel({ name: name.trim(), slug: slug.trim() });
+      setHotelId(hotel.id || hotel.hotel?.id);
+      setHotelSlug(slug.trim());
+      setStep(1);
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Error al crear el hotel');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleConfigureIntegration(e) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      if (pms === 'ical') {
+        if (!icalUrl) throw new Error('URL iCal requerida');
+        await saveIcalUrl(icalUrl, 'beds24');
+      } else if (pms === 'cloudbeds') {
+        if (!apiKey) throw new Error('API Key requerida');
+        await savePollingConfig({ provider: 'cloudbeds', api_key: apiKey, property_id: propertyId || undefined });
+      } else if (pms === 'apaleo') {
+        if (!clientId || !clientSecret) throw new Error('Client ID y Secret requeridos');
+        await savePollingConfig({ provider: 'apaleo', client_id: clientId, client_secret: clientSecret, property_id: propertyId || undefined });
+      } else if (pms === 'webhook') {
+        await saveWebhookConfig('generic', whSecret || undefined);
+      }
+      setStep(3);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message || 'Error al configurar integración');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCsvUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    try {
+      const res = await importCsv(file);
+      setCsvResult(res);
+      setStep(3);
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Error al procesar CSV');
+    } finally {
+      setLoading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  const STEPS = 4;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg mx-4 shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+          <h3 className="font-semibold text-white text-lg">Nuevo hotel</h3>
+          <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <StepIndicator current={step} total={STEPS} />
+
+          {/* ── Step 0: Datos del hotel ── */}
+          {step === 0 && (
+            <form onSubmit={handleCreateHotel} className="space-y-4">
+              <p className="text-zinc-400 text-sm">Paso 1 — Información básica</p>
+              <Field label="Nombre del hotel">
+                <input className={inputCls} placeholder="Ej: Hotel Ibiza Beach" value={name} onChange={handleNameChange} autoFocus />
+              </Field>
+              <Field label="Slug (URL interna)">
+                <input className={inputCls} placeholder="hotel-ibiza-beach" value={slug}
+                  onChange={e => { setSlug(e.target.value); setSlugManual(true); }} />
+              </Field>
+              <ErrorMsg message={error} />
+              <button type="submit" disabled={loading}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg transition-colors disabled:opacity-50">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                Crear hotel
+              </button>
+            </form>
+          )}
+
+          {/* ── Step 1: Elegir PMS ── */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <p className="text-zinc-400 text-sm">Paso 2 — ¿Qué PMS usa este hotel?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {PMS_OPTIONS.map(opt => (
+                  <button key={opt.id} onClick={() => { setPms(opt.id); setStep(opt.id === 'none' ? 3 : 2); }}
+                    className="flex flex-col items-start gap-1 p-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-emerald-500/50 rounded-xl transition-colors text-left">
+                    <div className="flex items-center gap-2">
+                      <opt.icon className="w-4 h-4 text-emerald-400" />
+                      <span className="text-white text-sm font-medium">{opt.label}</span>
+                    </div>
+                    <span className="text-zinc-500 text-xs">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setStep(0)} className="text-zinc-500 text-sm flex items-center gap-1 hover:text-zinc-300 transition-colors">
+                <ArrowLeft className="w-3.5 h-3.5" /> Volver
+              </button>
+            </div>
+          )}
+
+          {/* ── Step 2: Configurar integración ── */}
+          {step === 2 && pms !== 'csv' && (
+            <form onSubmit={handleConfigureIntegration} className="space-y-4">
+              <p className="text-zinc-400 text-sm">Paso 3 — Configurar {PMS_OPTIONS.find(p => p.id === pms)?.label}</p>
+
+              {pms === 'ical' && (
+                <Field label="URL iCal">
+                  <input className={inputCls} placeholder="https://beds24.com/ical/..." value={icalUrl} onChange={e => setIcalUrl(e.target.value)} autoFocus />
+                </Field>
+              )}
+              {pms === 'cloudbeds' && (<>
+                <Field label="API Key">
+                  <input className={inputCls} placeholder="sk_live_..." value={apiKey} onChange={e => setApiKey(e.target.value)} autoFocus />
+                </Field>
+                <Field label="Property ID (opcional)">
+                  <input className={inputCls} placeholder="12345" value={propertyId} onChange={e => setPropertyId(e.target.value)} />
+                </Field>
+              </>)}
+              {pms === 'apaleo' && (<>
+                <Field label="Client ID">
+                  <input className={inputCls} value={clientId} onChange={e => setClientId(e.target.value)} autoFocus />
+                </Field>
+                <Field label="Client Secret">
+                  <input className={inputCls} type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} />
+                </Field>
+                <Field label="Property ID">
+                  <input className={inputCls} placeholder="MHF" value={propertyId} onChange={e => setPropertyId(e.target.value)} />
+                </Field>
+              </>)}
+              {pms === 'webhook' && (
+                <Field label="Webhook Secret (dejar vacío para generar)">
+                  <input className={inputCls} value={whSecret} onChange={e => setWhSecret(e.target.value)} placeholder="Opcional" />
+                </Field>
+              )}
+
+              <ErrorMsg message={error} />
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setStep(1)}
+                  className="flex items-center gap-1 px-3 py-2 text-zinc-400 hover:text-white text-sm transition-colors">
+                  <ArrowLeft className="w-3.5 h-3.5" /> Volver
+                </button>
+                <button type="submit" disabled={loading}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg transition-colors disabled:opacity-50">
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                  Guardar integración
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ── Step 2 CSV: Upload ── */}
+          {step === 2 && pms === 'csv' && (
+            <div className="space-y-4">
+              <p className="text-zinc-400 text-sm">Paso 3 — Importar reservas CSV</p>
+              <div onClick={() => !loading && fileRef.current?.click()}
+                className="border-2 border-dashed border-zinc-700 hover:border-emerald-500/50 rounded-xl p-8 text-center cursor-pointer transition-colors">
+                {loading
+                  ? <Loader2 className="w-8 h-8 mx-auto text-emerald-400 animate-spin" />
+                  : <Upload className="w-8 h-8 mx-auto text-zinc-600" />}
+                <p className="text-zinc-400 text-sm mt-2">{loading ? 'Procesando...' : 'Clic para subir CSV'}</p>
+                <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+              </div>
+              <ErrorMsg message={error} />
+              <div className="flex gap-3">
+                <button onClick={() => setStep(1)} className="flex items-center gap-1 px-3 py-2 text-zinc-400 hover:text-white text-sm transition-colors">
+                  <ArrowLeft className="w-3.5 h-3.5" /> Volver
+                </button>
+                <button onClick={() => setStep(3)}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm transition-colors">
+                  Saltar por ahora
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: Listo ── */}
+          {step === 3 && (
+            <div className="text-center space-y-4">
+              <div className="w-14 h-14 bg-emerald-500/15 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle className="w-7 h-7 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-white font-semibold text-lg">Hotel creado</p>
+                <p className="text-zinc-400 text-sm mt-1">
+                  <strong className="text-white">{name}</strong> está listo.
+                  {pms && pms !== 'none' && ` Integración ${PMS_OPTIONS.find(p => p.id === pms)?.label} configurada.`}
+                </p>
+                {csvResult && (
+                  <p className="text-emerald-400 text-sm mt-1">
+                    CSV: {csvResult.created} reservas creadas, {csvResult.updated} actualizadas.
+                  </p>
+                )}
+              </div>
+              <p className="text-zinc-500 text-xs">
+                Siguiente paso: crear usuarios para este hotel desde la pestaña Usuarios.
+              </p>
+              <button onClick={onDone}
+                className="w-full px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg transition-colors">
+                Ir al panel de hoteles
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Hotel Modal ─────────────────────────────────────────────────────────────
 
@@ -379,7 +653,7 @@ function HotelsTab({ hotels, loading, onRefresh }) {
             )}
 
             {modal === 'create' && (
-                <HotelModal onClose={() => setModal(null)} onSaved={handleSaved} />
+                <OnboardingWizard onClose={() => setModal(null)} onDone={handleSaved} />
             )}
             {modal && modal !== 'create' && (
                 <HotelModal hotel={modal} onClose={() => setModal(null)} onSaved={handleSaved} />
