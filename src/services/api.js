@@ -118,4 +118,39 @@ export async function adminDeleteUser(id) {
     return response.data;
 }
 
+// Integrations
+export async function getIntegrations() {
+    const response = await api.get('/integrations');
+    return response.data;
+}
+
+export async function importCsv(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await api.post('/integrations/import/csv', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+}
+
+export async function saveIcalUrl(ical_url, provider) {
+    const response = await api.post('/integrations/ical', { ical_url, provider });
+    return response.data;
+}
+
+export async function syncIcalNow() {
+    const response = await api.post('/integrations/ical/sync');
+    return response.data;
+}
+
+export async function saveWebhookConfig(provider, webhook_secret) {
+    const response = await api.post('/integrations/webhook-config', { provider, webhook_secret });
+    return response.data;
+}
+
+export async function deleteIntegration(id) {
+    const response = await api.delete(`/integrations/${id}`);
+    return response.data;
+}
+
 export default api;

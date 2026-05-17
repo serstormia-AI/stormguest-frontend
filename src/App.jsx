@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail, Cog, Shield } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail, Cog, Shield, Plug } from 'lucide-react';
 
 import StormGuestAuth from './pages/StormGuestAuth';
 import Catalog from './pages/Catalog';
@@ -13,13 +13,14 @@ import Orders from './pages/Orders';
 import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
 import SuperAdmin from './pages/SuperAdmin';
+import Integrations from './pages/Integrations';
 
 // ── RBAC ──────────────────────────────────────────────────────
 // Qué rutas puede ver cada rol
 const ROLE_ROUTES = {
   reception:     ['/checkins', '/chat', '/requests', '/orders'],
-  hotel_manager: ['/checkins', '/chat', '/requests', '/catalog', '/reviews', '/orders', '/notifications', '/settings', '/'],
-  super_admin:   ['/checkins', '/chat', '/requests', '/catalog', '/reviews', '/orders', '/notifications', '/settings', '/admin', '/'],
+  hotel_manager: ['/checkins', '/chat', '/requests', '/catalog', '/reviews', '/orders', '/notifications', '/settings', '/integrations', '/'],
+  super_admin:   ['/checkins', '/chat', '/requests', '/catalog', '/reviews', '/orders', '/notifications', '/settings', '/integrations', '/admin', '/'],
 };
 
 function canAccess(role, path) {
@@ -74,6 +75,7 @@ function Layout({ children }) {
     { name: 'Órdenes',               icon: CreditCard,      path: '/orders' },
     { name: 'Notificaciones',        icon: Mail,            path: '/notifications' },
     { name: 'Configuración',         icon: Cog,             path: '/settings' },
+    { name: 'Integraciones PMS',     icon: Plug,            path: '/integrations' },
     { name: 'Super Admin',           icon: Shield,          path: '/admin' },
   ];
   const menu = allMenu.filter(item => canAccess(role, item.path));
@@ -188,6 +190,8 @@ export default function App() {
         <Route path="/reviews"  element={<PrivateRoute><RoleRoute path="/reviews"><Layout><Reviews /></Layout></RoleRoute></PrivateRoute>} />
         <Route path="/notifications" element={<PrivateRoute><RoleRoute path="/notifications"><Layout><Notifications /></Layout></RoleRoute></PrivateRoute>} />
         <Route path="/settings"      element={<PrivateRoute><RoleRoute path="/settings"><Layout><Settings /></Layout></RoleRoute></PrivateRoute>} />
+
+        <Route path="/integrations" element={<PrivateRoute><RoleRoute path="/integrations"><Layout><Integrations /></Layout></RoleRoute></PrivateRoute>} />
 
         {/* Solo super_admin */}
         <Route path="/admin" element={<PrivateRoute><RoleRoute path="/admin"><Layout><SuperAdmin /></Layout></RoleRoute></PrivateRoute>} />
