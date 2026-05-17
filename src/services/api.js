@@ -173,4 +173,9 @@ export async function getIntegrationsHealth() {
     return response.data;
 }
 
+export async function updateReview(id, data) {
+    const response = await api.put(`/reviews/${id}`, data);
+    return response.data;
+}
+
 export default api;
