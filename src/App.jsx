@@ -14,6 +14,19 @@ import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
 import SuperAdmin from './pages/SuperAdmin';
 
+// ── RBAC ──────────────────────────────────────────────────────
+// Qué rutas puede ver cada rol
+const ROLE_ROUTES = {
+  reception:     ['/checkins', '/chat', '/requests', '/orders'],
+  hotel_manager: ['/checkins', '/chat', '/requests', '/catalog', '/reviews', '/orders', '/notifications', '/settings', '/'],
+  super_admin:   ['/checkins', '/chat', '/requests', '/catalog', '/reviews', '/orders', '/notifications', '/settings', '/admin', '/'],
+};
+
+function canAccess(role, path) {
+  const allowed = ROLE_ROUTES[role] || [];
+  return allowed.includes(path);
+}
+
 // ── Auth helpers ──────────────────────────────────────────────
 function getAuth() {
   return {
@@ -30,10 +43,19 @@ function logout() {
   localStorage.removeItem('hotel_id');
 }
 
-// ── Ruta protegida ────────────────────────────────────────────
+// ── Ruta protegida (auth) ─────────────────────────────────────
 function PrivateRoute({ children }) {
   const { token } = getAuth();
   return token ? children : <Navigate to="/login" replace />;
+}
+
+// ── Ruta protegida (rol) ──────────────────────────────────────
+function RoleRoute({ path, children }) {
+  const { role } = getAuth();
+  if (canAccess(role, path)) return children;
+  // reception no tiene dashboard — redirigir a su primera pantalla
+  const fallback = role === 'reception' ? '/checkins' : '/';
+  return <Navigate to={fallback} replace />;
 }
 
 // ── Layout principal ──────────────────────────────────────────
@@ -42,18 +64,19 @@ function Layout({ children }) {
   const navigate  = useNavigate();
   const { role }  = getAuth();
 
-  const menu = [
+  const allMenu = [
     { name: 'Dashboard',              icon: LayoutDashboard, path: '/' },
     { name: 'Recepción (Check-ins)',  icon: Users,           path: '/checkins' },
     { name: 'Chat de Huéspedes',      icon: MessageSquare,   path: '/chat' },
     { name: 'Pedidos (Room Service)', icon: ShoppingBag,     path: '/requests' },
     { name: 'Catálogo (Upsells)',     icon: Ticket,          path: '/catalog' },
     { name: 'Reseñas',               icon: Star,            path: '/reviews' },
-    { name: 'Órdenes',              icon: CreditCard,      path: '/orders' },
-    { name: 'Notificaciones',       icon: Mail,            path: '/notifications' },
-    { name: 'Configuración',        icon: Cog,             path: '/settings' },
-    ...(role === 'super_admin' ? [{ name: 'Super Admin', icon: Shield, path: '/admin' }] : []),
+    { name: 'Órdenes',               icon: CreditCard,      path: '/orders' },
+    { name: 'Notificaciones',        icon: Mail,            path: '/notifications' },
+    { name: 'Configuración',         icon: Cog,             path: '/settings' },
+    { name: 'Super Admin',           icon: Shield,          path: '/admin' },
   ];
+  const menu = allMenu.filter(item => canAccess(role, item.path));
 
   const handleLogout = () => {
     logout();
@@ -123,7 +146,16 @@ function Layout({ children }) {
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 border border-zinc-700 flex items-center justify-center text-xs font-bold">
                 {(localStorage.getItem('name') || 'A')[0].toUpperCase()}
               </div>
-              <span className="text-sm text-zinc-300">{localStorage.getItem('name') || ''}</span>
+              <div className="flex flex-col items-start">
+                <span className="text-sm text-zinc-300">{localStorage.getItem('name') || ''}</span>
+                <span className={`text-xs font-medium ${
+                  role === 'super_admin'   ? 'text-purple-400' :
+                  role === 'hotel_manager' ? 'text-emerald-400' :
+                                             'text-zinc-500'
+                }`}>
+                  {role === 'super_admin' ? 'Super Admin' : role === 'hotel_manager' ? 'Manager' : 'Recepción'}
+                </span>
+              </div>
             </div>
           </div>
         </header>
@@ -144,17 +176,21 @@ export default function App() {
         {/* Ruta pública */}
         <Route path="/login" element={<StormGuestAuth />} />
 
-        {/* Rutas protegidas */}
-        <Route path="/" element={<PrivateRoute><Layout><Dashboard /></Layout></PrivateRoute>} />
-        <Route path="/checkins" element={<PrivateRoute><Layout><CheckIns /></Layout></PrivateRoute>} />
-        <Route path="/chat"     element={<PrivateRoute><Layout><Chat /></Layout></PrivateRoute>} />
-        <Route path="/requests" element={<PrivateRoute><Layout><Requests /></Layout></PrivateRoute>} />
-        <Route path="/catalog"  element={<PrivateRoute><Layout><Catalog /></Layout></PrivateRoute>} />
-        <Route path="/reviews"  element={<PrivateRoute><Layout><Reviews /></Layout></PrivateRoute>} />
-        <Route path="/orders"         element={<PrivateRoute><Layout><Orders /></Layout></PrivateRoute>} />
-        <Route path="/notifications"  element={<PrivateRoute><Layout><Notifications /></Layout></PrivateRoute>} />
-        <Route path="/settings"       element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
-        <Route path="/admin"          element={<PrivateRoute><Layout><SuperAdmin /></Layout></PrivateRoute>} />
+        {/* Rutas protegidas — todos los roles autenticados */}
+        <Route path="/" element={<PrivateRoute><RoleRoute path="/"><Layout><Dashboard /></Layout></RoleRoute></PrivateRoute>} />
+        <Route path="/checkins" element={<PrivateRoute><RoleRoute path="/checkins"><Layout><CheckIns /></Layout></RoleRoute></PrivateRoute>} />
+        <Route path="/chat"     element={<PrivateRoute><RoleRoute path="/chat"><Layout><Chat /></Layout></RoleRoute></PrivateRoute>} />
+        <Route path="/requests" element={<PrivateRoute><RoleRoute path="/requests"><Layout><Requests /></Layout></RoleRoute></PrivateRoute>} />
+        <Route path="/orders"   element={<PrivateRoute><RoleRoute path="/orders"><Layout><Orders /></Layout></RoleRoute></PrivateRoute>} />
+
+        {/* Solo hotel_manager y super_admin */}
+        <Route path="/catalog"  element={<PrivateRoute><RoleRoute path="/catalog"><Layout><Catalog /></Layout></RoleRoute></PrivateRoute>} />
+        <Route path="/reviews"  element={<PrivateRoute><RoleRoute path="/reviews"><Layout><Reviews /></Layout></RoleRoute></PrivateRoute>} />
+        <Route path="/notifications" element={<PrivateRoute><RoleRoute path="/notifications"><Layout><Notifications /></Layout></RoleRoute></PrivateRoute>} />
+        <Route path="/settings"      element={<PrivateRoute><RoleRoute path="/settings"><Layout><Settings /></Layout></RoleRoute></PrivateRoute>} />
+
+        {/* Solo super_admin */}
+        <Route path="/admin" element={<PrivateRoute><RoleRoute path="/admin"><Layout><SuperAdmin /></Layout></RoleRoute></PrivateRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
