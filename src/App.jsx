@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail, Cog } from 'lucide-react';
 
 import StormGuestAuth from './pages/StormGuestAuth';
 import Catalog from './pages/Catalog';
@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard';
 import Reviews from './pages/Reviews';
 import Orders from './pages/Orders';
 import Notifications from './pages/Notifications';
+import Settings from './pages/Settings';
 
 // ── Auth helpers ──────────────────────────────────────────────
 function getAuth() {
@@ -48,6 +49,7 @@ function Layout({ children }) {
     { name: 'Reseñas',               icon: Star,            path: '/reviews' },
     { name: 'Órdenes',              icon: CreditCard,      path: '/orders' },
     { name: 'Notificaciones',       icon: Mail,            path: '/notifications' },
+    { name: 'Configuración',        icon: Cog,             path: '/settings' },
   ];
 
   const handleLogout = () => {
@@ -148,6 +150,7 @@ export default function App() {
         <Route path="/reviews"  element={<PrivateRoute><Layout><Reviews /></Layout></PrivateRoute>} />
         <Route path="/orders"         element={<PrivateRoute><Layout><Orders /></Layout></PrivateRoute>} />
         <Route path="/notifications"  element={<PrivateRoute><Layout><Notifications /></Layout></PrivateRoute>} />
+        <Route path="/settings"       element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

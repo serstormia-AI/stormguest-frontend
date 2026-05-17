@@ -1,0 +1,287 @@
+import React, { useState, useEffect } from 'react';
+import { Save, RotateCcw, Eye, EyeOff, Send, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { getSettings, updateSettings, testNotification } from '../services/api';
+
+// Prompt base de Julia — mismo que el backend, para poder restaurarlo
+const BASE_PROMPT_PLACEHOLDER = `Eres Julia, la asistente virtual de este hotel. Tu rol es atender a los huéspedes con calidez, profesionalismo y eficiencia.
+
+Tono: cálido, profesional y conciso. Detecta automáticamente el idioma del huésped y responde siempre en ese mismo idioma. Máximo 3-4 oraciones por respuesta.`;
+
+function Alert({ type, message }) {
+  if (!message) return null;
+  const isError = type === 'error';
+  return (
+    <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${
+      isError
+        ? 'bg-red-950/50 border border-red-800 text-red-300'
+        : 'bg-emerald-950/50 border border-emerald-800 text-emerald-300'
+    }`}>
+      {isError
+        ? <AlertCircle className="w-4 h-4 shrink-0" />
+        : <CheckCircle className="w-4 h-4 shrink-0" />}
+      {message}
+    </div>
+  );
+}
+
+function Spinner() {
+  return <Loader2 className="w-4 h-4 animate-spin" />;
+}
+
+export default function Settings() {
+  // ── Prompt de Julia ──────────────────────────────────────────
+  const [prompt, setPrompt] = useState('');
+  const [promptSaving, setPromptSaving] = useState(false);
+  const [promptStatus, setPromptStatus] = useState(null); // { type, message }
+
+  // ── SMTP ──────────────────────────────────────────────────────
+  const [smtp, setSmtp] = useState({
+    smtp_host: '',
+    smtp_port: 587,
+    smtp_user: '',
+    smtp_pass: '',
+    smtp_from: '',
+  });
+  const [showPass, setShowPass] = useState(false);
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [smtpStatus, setSmtpStatus] = useState(null); // { type, message }
+
+  // ── Cargar config al montar ──────────────────────────────────
+  useEffect(() => {
+    getSettings()
+      .then((data) => {
+        if (data.system_prompt) setPrompt(data.system_prompt);
+        setSmtp({
+          smtp_host: data.smtp_host || '',
+          smtp_port: data.smtp_port || 587,
+          smtp_user: data.smtp_user || '',
+          smtp_pass: '',          // nunca viene del servidor
+          smtp_from: data.smtp_from || '',
+        });
+      })
+      .catch(() => {
+        // Sin bloquear la UI si falla
+      });
+  }, []);
+
+  // ── Guardar prompt ───────────────────────────────────────────
+  async function handleSavePrompt() {
+    setPromptSaving(true);
+    setPromptStatus(null);
+    try {
+      await updateSettings({ system_prompt: prompt });
+      setPromptStatus({ type: 'success', message: 'Prompt de Julia guardado correctamente.' });
+    } catch {
+      setPromptStatus({ type: 'error', message: 'Error al guardar. Intentá de nuevo.' });
+    } finally {
+      setPromptSaving(false);
+    }
+  }
+
+  function handleRestorePrompt() {
+    setPrompt('');
+    setPromptStatus({ type: 'success', message: 'Prompt restablecido al valor por defecto. Guardá para confirmar.' });
+  }
+
+  // ── Guardar SMTP ─────────────────────────────────────────────
+  async function handleSaveSmtp() {
+    setSmtpSaving(true);
+    setSmtpStatus(null);
+    try {
+      const payload = { ...smtp };
+      // Si no se tocó la contraseña, no la enviamos para no pisar la existente
+      if (!payload.smtp_pass) delete payload.smtp_pass;
+      await updateSettings(payload);
+      setSmtpStatus({ type: 'success', message: 'Configuración de email guardada.' });
+    } catch {
+      setSmtpStatus({ type: 'error', message: 'Error al guardar. Verificá los datos e intentá de nuevo.' });
+    } finally {
+      setSmtpSaving(false);
+    }
+  }
+
+  // ── Probar email ─────────────────────────────────────────────
+  async function handleTestEmail() {
+    setSmtpTesting(true);
+    setSmtpStatus(null);
+    try {
+      const result = await testNotification();
+      if (result.sent) {
+        setSmtpStatus({ type: 'success', message: `Email de prueba enviado a ${result.to}.` });
+      } else {
+        setSmtpStatus({ type: 'error', message: `No se pudo enviar: ${result.reason || 'configuración incompleta'}` });
+      }
+    } catch {
+      setSmtpStatus({ type: 'error', message: 'Error al probar la configuración.' });
+    } finally {
+      setSmtpTesting(false);
+    }
+  }
+
+  return (
+    <div className="p-8 max-w-3xl mx-auto space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-white">Configuración del Hotel</h1>
+        <p className="text-zinc-400 mt-1 text-sm">
+          Personalizá el comportamiento de Julia y la configuración de correo para tu hotel.
+        </p>
+      </div>
+
+      {/* ── Card: Julia ── */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Julia — Asistente Virtual</h2>
+            <p className="text-zinc-400 text-sm mt-0.5">
+              Personalizá cómo Julia responde a tus huéspedes
+            </p>
+          </div>
+          <div className="shrink-0 w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-lg select-none">
+            J
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-zinc-300">System Prompt</label>
+            <span className="text-xs text-zinc-500">{prompt.length} caracteres</span>
+          </div>
+          <textarea
+            rows={12}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder={BASE_PROMPT_PLACEHOLDER}
+            className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-600 resize-y leading-relaxed"
+          />
+          <p className="text-xs text-zinc-500">
+            Si dejás el campo vacío, Julia usará el prompt base de StormGuest.
+          </p>
+        </div>
+
+        <Alert type={promptStatus?.type} message={promptStatus?.message} />
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            onClick={handleSavePrompt}
+            disabled={promptSaving}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors"
+          >
+            {promptSaving ? <Spinner /> : <Save className="w-4 h-4" />}
+            Guardar
+          </button>
+          <button
+            onClick={handleRestorePrompt}
+            className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 text-sm px-4 py-2.5 rounded-xl border border-zinc-700 hover:border-zinc-600 transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Restaurar prompt por defecto
+          </button>
+        </div>
+      </div>
+
+      {/* ── Card: Email SMTP ── */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Configuración de Email</h2>
+          <p className="text-zinc-400 text-sm mt-0.5">
+            Cada hotel configura su propio servidor de email. Si no completás estos datos, se usará el servidor global de StormGuest.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* SMTP Host */}
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="text-sm font-medium text-zinc-300">SMTP Host</label>
+            <input
+              type="text"
+              value={smtp.smtp_host}
+              onChange={(e) => setSmtp((s) => ({ ...s, smtp_host: e.target.value }))}
+              placeholder="smtp.gmail.com"
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-600"
+            />
+          </div>
+
+          {/* Puerto */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-zinc-300">Puerto</label>
+            <input
+              type="number"
+              value={smtp.smtp_port}
+              onChange={(e) => setSmtp((s) => ({ ...s, smtp_port: Number(e.target.value) }))}
+              placeholder="587"
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-600"
+            />
+          </div>
+
+          {/* Usuario */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-zinc-300">Usuario</label>
+            <input
+              type="text"
+              value={smtp.smtp_user}
+              onChange={(e) => setSmtp((s) => ({ ...s, smtp_user: e.target.value }))}
+              placeholder="info@tuhotel.com"
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-600"
+            />
+          </div>
+
+          {/* Contraseña */}
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="text-sm font-medium text-zinc-300">Contraseña</label>
+            <div className="relative">
+              <input
+                type={showPass ? 'text' : 'password'}
+                value={smtp.smtp_pass}
+                onChange={(e) => setSmtp((s) => ({ ...s, smtp_pass: e.target.value }))}
+                placeholder="Dejá vacío para no cambiar la contraseña guardada"
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 pr-12 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-600"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* From */}
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="text-sm font-medium text-zinc-300">From (remitente visible)</label>
+            <input
+              type="text"
+              value={smtp.smtp_from}
+              onChange={(e) => setSmtp((s) => ({ ...s, smtp_from: e.target.value }))}
+              placeholder='Hotel Demo <info@hotel.com>'
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-600"
+            />
+          </div>
+        </div>
+
+        <Alert type={smtpStatus?.type} message={smtpStatus?.message} />
+
+        <div className="flex items-center gap-3 pt-1 flex-wrap">
+          <button
+            onClick={handleSaveSmtp}
+            disabled={smtpSaving}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors"
+          >
+            {smtpSaving ? <Spinner /> : <Save className="w-4 h-4" />}
+            Guardar
+          </button>
+          <button
+            onClick={handleTestEmail}
+            disabled={smtpTesting}
+            className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 text-sm px-4 py-2.5 rounded-xl border border-zinc-700 hover:border-zinc-600 disabled:opacity-60 transition-colors"
+          >
+            {smtpTesting ? <Spinner /> : <Send className="w-4 h-4" />}
+            Probar configuración
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
