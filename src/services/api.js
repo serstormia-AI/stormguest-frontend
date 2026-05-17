@@ -74,4 +74,48 @@ export async function testNotification() {
     return response.data;
 }
 
+// ─── Super Admin ───────────────────────────────────────────────────────────
+
+// Hotels
+export async function adminGetHotels() {
+    const response = await api.get('/admin/hotels');
+    return response.data;
+}
+
+export async function adminCreateHotel(data) {
+    const response = await api.post('/admin/hotels', data);
+    return response.data;
+}
+
+export async function adminUpdateHotel(id, data) {
+    const response = await api.put(`/admin/hotels/${id}`, data);
+    return response.data;
+}
+
+export async function adminDeleteHotel(id) {
+    const response = await api.delete(`/admin/hotels/${id}`);
+    return response.data;
+}
+
+// Users
+export async function adminGetUsers() {
+    const response = await api.get('/admin/users');
+    return response.data;
+}
+
+export async function adminCreateUser(data) {
+    const response = await api.post('/admin/users', data);
+    return response.data;
+}
+
+export async function adminUpdateUser(id, data) {
+    const response = await api.put(`/admin/users/${id}`, data);
+    return response.data;
+}
+
+export async function adminDeleteUser(id) {
+    const response = await api.delete(`/admin/users/${id}`);
+    return response.data;
+}
+
 export default api;

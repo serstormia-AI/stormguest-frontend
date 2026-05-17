@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail, Cog } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail, Cog, Shield } from 'lucide-react';
 
 import StormGuestAuth from './pages/StormGuestAuth';
 import Catalog from './pages/Catalog';
@@ -12,6 +12,7 @@ import Reviews from './pages/Reviews';
 import Orders from './pages/Orders';
 import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
+import SuperAdmin from './pages/SuperAdmin';
 
 // ── Auth helpers ──────────────────────────────────────────────
 function getAuth() {
@@ -39,6 +40,7 @@ function PrivateRoute({ children }) {
 function Layout({ children }) {
   const location = useLocation();
   const navigate  = useNavigate();
+  const { role }  = getAuth();
 
   const menu = [
     { name: 'Dashboard',              icon: LayoutDashboard, path: '/' },
@@ -50,6 +52,7 @@ function Layout({ children }) {
     { name: 'Órdenes',              icon: CreditCard,      path: '/orders' },
     { name: 'Notificaciones',       icon: Mail,            path: '/notifications' },
     { name: 'Configuración',        icon: Cog,             path: '/settings' },
+    ...(role === 'super_admin' ? [{ name: 'Super Admin', icon: Shield, path: '/admin' }] : []),
   ];
 
   const handleLogout = () => {
@@ -151,6 +154,7 @@ export default function App() {
         <Route path="/orders"         element={<PrivateRoute><Layout><Orders /></Layout></PrivateRoute>} />
         <Route path="/notifications"  element={<PrivateRoute><Layout><Notifications /></Layout></PrivateRoute>} />
         <Route path="/settings"       element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
+        <Route path="/admin"          element={<PrivateRoute><Layout><SuperAdmin /></Layout></PrivateRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
