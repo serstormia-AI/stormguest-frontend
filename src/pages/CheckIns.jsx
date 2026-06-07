@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseAdmin } from '../lib/supabase';
 import { Loader2, User, Key, Calendar, ArrowRight } from 'lucide-react';
 
 export default function CheckIns() {
@@ -13,29 +13,36 @@ export default function CheckIns() {
     const fetchReservations = async () => {
         setLoading(true);
         // Simular que somos el administrador del hotel "demo"
-        const { data: hotelData } = await supabase
+        const { data: hotelData } = await supabaseAdmin
             .from('hotels')
             .select('id')
             .eq('slug', 'demo')
             .single();
 
         if (hotelData) {
-            // Join con la tabla guests para obtener el nombre
-            const { data, error } = await supabase
+            const { data: reservations, error } = await supabaseAdmin
                 .from('reservations')
-                .select(`
-                    *,
-                    guests (
-                        first_name,
-                        last_name,
-                        email
-                    )
-                `)
+                .select('id, room_number, check_in, check_out, status, guest_id')
                 .eq('hotel_id', hotelData.id)
-                .order('checkin_date', { ascending: true });
-            
-            if (data) setReservations(data);
+                .order('check_in', { ascending: true });
+
             if (error) console.error(error);
+
+            if (reservations) {
+                const guestIds = [...new Set(reservations.map(r => r.guest_id).filter(Boolean))];
+                let guestsMap = {};
+                if (guestIds.length > 0) {
+                    const { data: guests } = await supabaseAdmin
+                        .from('guests')
+                        .select('id, name, email')
+                        .in('id', guestIds);
+                    if (guests) {
+                        guestsMap = Object.fromEntries(guests.map(g => [g.id, g]));
+                    }
+                }
+                const merged = reservations.map(res => ({ ...res, guest: guestsMap[res.guest_id] ?? null }));
+                setReservations(merged);
+            }
         }
         setLoading(false);
     };
@@ -97,7 +104,7 @@ export default function CheckIns() {
                                                     <User className="w-4 h-4 text-zinc-400" />
                                                 </div>
                                                 <div>
-                                                    <h3 className="font-bold text-sm">{res.guests?.first_name} {res.guests?.last_name}</h3>
+                                                    <h3 className="font-bold text-sm">{res.guest?.name}</h3>
                                                     <p className="text-xs text-zinc-500">ID: {res.pms_id}</p>
                                                 </div>
                                             </div>
@@ -110,12 +117,12 @@ export default function CheckIns() {
                                         <div className="flex items-center space-x-4 text-xs text-zinc-400 mb-4 bg-zinc-900/50 p-2 rounded-lg">
                                             <div className="flex items-center space-x-1">
                                                 <Calendar className="w-3 h-3" />
-                                                <span>{new Date(res.checkin_date).toLocaleDateString()}</span>
+                                                <span>{new Date(res.check_in).toLocaleDateString()}</span>
                                             </div>
                                             <ArrowRight className="w-3 h-3 text-zinc-600" />
                                             <div className="flex items-center space-x-1">
                                                 <Calendar className="w-3 h-3" />
-                                                <span>{new Date(res.checkout_date).toLocaleDateString()}</span>
+                                                <span>{new Date(res.check_out).toLocaleDateString()}</span>
                                             </div>
                                         </div>
 
