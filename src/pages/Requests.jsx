@@ -14,7 +14,8 @@ export default function Requests() {
 
     useEffect(() => {
         const init = async () => {
-            const { data: hotel } = await supabaseAdmin.from('hotels').select('id').limit(1).single();
+            const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
+            const { data: hotel } = await supabaseAdmin.from('hotels').select('id').eq('slug', hotelSlug).single();
             if (hotel) {
                 setHotelId(hotel.id);
                 fetchRequests(hotel.id);
@@ -26,7 +27,7 @@ export default function Requests() {
     const fetchRequests = async (hId) => {
         const { data: requests, error } = await supabaseAdmin
             .from('requests')
-            .select('id, hotel_id, guest_id, experience_id, total_price, status, internal_note, created_at')
+            .select('id, hotel_id, guest_id, experience_id, total_price, status, created_at')
             .eq('hotel_id', hId)
             .order('created_at', { ascending: false });
 
@@ -68,25 +69,22 @@ export default function Requests() {
     useEffect(() => {
         if (!hotelId) return;
 
-        const channel = supabase
+        const channel = supabaseAdmin
             .channel('hotel-requests')
             .on(
                 'postgres_changes',
                 {
-                    event: '*', // Listen to INSERT and UPDATE
+                    event: '*',
                     schema: 'public',
                     table: 'requests',
                     filter: `hotel_id=eq.${hotelId}`
                 },
-                () => {
-                    // Refetch all to get the joined data easily
-                    fetchRequests(hotelId);
-                }
+                () => fetchRequests(hotelId)
             )
             .subscribe();
 
         return () => {
-            supabase.removeChannel(channel);
+            supabaseAdmin.removeChannel(channel);
         };
     }, [hotelId]);
 
