@@ -133,10 +133,10 @@ function Layout({ children }) {
 
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-3 bg-zinc-900/50 px-3 py-1.5 rounded-lg border border-zinc-800">
-              <span className="text-sm text-zinc-400">Hotel Activo:</span>
-              <select className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer">
-                <option value="demo">Hotel Demo</option>
-              </select>
+              <span className="text-sm text-zinc-400">Hotel:</span>
+              <span className="text-sm font-bold text-white uppercase tracking-wide">
+                {localStorage.getItem('hotel_id') || 'demo'}
+              </span>
             </div>
 
             <button className="relative text-zinc-400 hover:text-white transition-colors">

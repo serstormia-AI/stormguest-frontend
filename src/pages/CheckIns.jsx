@@ -13,10 +13,11 @@ export default function CheckIns() {
     const fetchReservations = async () => {
         setLoading(true);
         // Simular que somos el administrador del hotel "demo"
+        const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
         const { data: hotelData } = await supabaseAdmin
             .from('hotels')
             .select('id')
-            .eq('slug', 'demo')
+            .eq('slug', hotelSlug)
             .single();
 
         if (hotelData) {
@@ -48,7 +49,7 @@ export default function CheckIns() {
     };
 
     const updateStatus = async (id, newStatus) => {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('reservations')
             .update({ status: newStatus })
             .eq('id', id);

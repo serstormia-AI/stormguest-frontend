@@ -22,7 +22,8 @@ export default function Chat() {
 
     const fetchGuestsWithMessages = async () => {
         setLoading(true);
-        const { data: hotelData } = await supabaseAdmin.from('hotels').select('id').eq('slug', 'demo').single();
+        const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
+        const { data: hotelData } = await supabaseAdmin.from('hotels').select('id').eq('slug', hotelSlug).single();
         if (!hotelData) { setLoading(false); return; }
         setHotelId(hotelData.id);
 
@@ -99,7 +100,7 @@ export default function Chat() {
         setNewMessage("");
         setSending(true);
 
-        await supabase.from('messages').insert({
+        await supabaseAdmin.from('messages').insert({
             hotel_id: hotelId,
             guest_id: activeGuest.id,
             sender_type: 'staff',
