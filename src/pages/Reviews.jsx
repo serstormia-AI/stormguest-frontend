@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Star, Plus, Trash2, X, ChevronDown, MessageSquare, CheckCircle } from 'lucide-react';
-import { getReviews, createReview, deleteReview, getGuests } from '../services/api';
-import { updateReview } from '../services/api';
+import { Star, Plus, Trash2, X, ChevronDown, MessageSquare } from 'lucide-react';
+import { supabaseAdmin } from '../lib/supabase';
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -85,55 +84,6 @@ function StatBar({ star, count, total }) {
   );
 }
 
-// Inline reply form embedded inside a review card
-function ReplyForm({ review, onSave, onCancel }) {
-  const [text, setText] = useState(review.response_text || '');
-  const [saving, setSaving] = useState(false);
-
-  async function handleSave() {
-    if (!text.trim()) return;
-    setSaving(true);
-    try {
-      const updated = await updateReview(review.id, { responded: true, response_text: text.trim() });
-      onSave(updated);
-    } catch {
-      // Optimistic fallback
-      onSave({ ...review, responded: true, response_text: text.trim() });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="mt-4 pt-4 border-t border-zinc-800">
-      <p className="text-xs text-zinc-500 mb-2 font-medium uppercase tracking-wider">Tu respuesta</p>
-      <textarea
-        autoFocus
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={3}
-        placeholder="Escribe una respuesta al huésped…"
-        className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-xl px-4 py-2.5 outline-none focus:border-emerald-500 resize-none placeholder:text-zinc-600 transition-colors"
-      />
-      <div className="flex gap-2 mt-2">
-        <button
-          onClick={handleSave}
-          disabled={saving || !text.trim()}
-          className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-semibold text-xs px-3 py-1.5 rounded-lg transition-colors"
-        >
-          <CheckCircle className="w-3.5 h-3.5" />
-          {saving ? 'Guardando…' : 'Confirmar respuesta'}
-        </button>
-        <button
-          onClick={onCancel}
-          className="text-zinc-500 hover:text-zinc-300 text-xs px-3 py-1.5 rounded-lg transition-colors"
-        >
-          Cancelar
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -141,7 +91,6 @@ const FILTER_OPTIONS = [
   { value: 'all', label: 'Todas' },
   { value: 'low', label: 'Solo 1–2 ★' },
   { value: 'high', label: 'Solo 5 ★' },
-  { value: 'pending', label: 'Sin responder' },
 ];
 
 function formatDate(iso) {
@@ -150,26 +99,46 @@ function formatDate(iso) {
 
 export default function Reviews() {
   const [reviews, setReviews] = useState([]);
-  const [guests, setGuests] = useState([]);
+  const [guests, setGuests] = useState([]); // guests for the create modal
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [deleting, setDeleting] = useState(null);
-  const [replyingId, setReplyingId] = useState(null);
   const [form, setForm] = useState({ guest_id: '', rating: 0, comment: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [hotelId, setHotelId] = useState('');
 
   useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
     setLoading(true);
     try {
-      const [rRes, gRes] = await Promise.all([getReviews(), getGuests()]);
-      setReviews(rRes.data ?? []);
-      setGuests(gRes.data ?? []);
-    } catch {
-      setReviews([]);
-      setGuests([]);
+      const slug = localStorage.getItem('hotel_id') || 'demo';
+      const { data: hotel } = await supabaseAdmin.from('hotels').select('id').eq('slug', slug).single();
+      if (!hotel) { setLoading(false); return; }
+      setHotelId(hotel.id);
+
+      // Fetch reviews for this hotel (hotel_id is TEXT in reviews table)
+      const { data: rawReviews } = await supabaseAdmin
+        .from('reviews')
+        .select('id, guest_id, rating, comment, created_at')
+        .eq('hotel_id', hotel.id)
+        .order('created_at', { ascending: false });
+
+      const reviewList = rawReviews || [];
+
+      // Two-step: guest names
+      const guestIds = [...new Set(reviewList.map(r => r.guest_id).filter(Boolean))];
+      let guestsMap = {};
+      if (guestIds.length > 0) {
+        const { data: guestsData } = await supabaseAdmin.from('guests').select('id, name, email').in('id', guestIds);
+        if (guestsData) guestsMap = Object.fromEntries(guestsData.map(g => [g.id, g]));
+      }
+
+      setReviews(reviewList.map(r => ({ ...r, guestName: guestsMap[r.guest_id]?.name || 'Huésped' })));
+      setGuests(Object.values(guestsMap));
+    } catch (e) {
+      console.error('Reviews fetch error:', e);
     } finally {
       setLoading(false);
     }
@@ -178,10 +147,7 @@ export default function Reviews() {
   const stats = useMemo(() => {
     const total = reviews.length;
     const avg = total > 0 ? (reviews.reduce((s, r) => s + r.rating, 0) / total).toFixed(1) : '—';
-    const dist = [5, 4, 3, 2, 1].map((s) => ({
-      star: s,
-      count: reviews.filter((r) => r.rating === s).length,
-    }));
+    const dist = [5, 4, 3, 2, 1].map((s) => ({ star: s, count: reviews.filter((r) => r.rating === s).length }));
     return { total, avg, dist };
   }, [reviews]);
 
@@ -189,7 +155,6 @@ export default function Reviews() {
     return reviews.filter((r) => {
       if (filter === 'low') return r.rating <= 2;
       if (filter === 'high') return r.rating === 5;
-      if (filter === 'pending') return !r.responded;
       return true;
     });
   }, [reviews, filter]);
@@ -197,43 +162,28 @@ export default function Reviews() {
   async function handleDelete(id) {
     if (!window.confirm('¿Eliminar esta reseña?')) return;
     setDeleting(id);
-    try {
-      await deleteReview(id);
-    } catch {
-      // best-effort
-    } finally {
-      setReviews((prev) => prev.filter((r) => r.id !== id));
-      setDeleting(null);
-    }
-  }
-
-  function handleReplySave(updated) {
-    setReviews((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)));
-    setReplyingId(null);
+    await supabaseAdmin.from('reviews').delete().eq('id', id);
+    setReviews((prev) => prev.filter((r) => r.id !== id));
+    setDeleting(null);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.guest_id || form.rating === 0) return;
+    if (!form.guest_id || form.rating === 0 || !hotelId) return;
     setSubmitting(true);
-    try {
-      const res = await createReview(form);
-      const guest = guests.find((g) => g.id === form.guest_id);
-      setReviews((prev) => [
-        {
-          ...res.data,
-          guests: guest ? { name: guest.name, email: guest.email || '' } : null,
-          responded: false,
-        },
-        ...prev,
-      ]);
-    } catch {
-      // silently ignore — user can refresh
-    } finally {
-      setSubmitting(false);
-      setShowModal(false);
-      setForm({ guest_id: '', rating: 0, comment: '' });
+    const { data, error } = await supabaseAdmin.from('reviews').insert({
+      hotel_id: hotelId, // stored as text
+      guest_id: form.guest_id,
+      rating: form.rating,
+      comment: form.comment || null,
+    }).select().single();
+    if (!error && data) {
+      const guest = guests.find(g => g.id === form.guest_id);
+      setReviews(prev => [{ ...data, guestName: guest?.name || 'Huésped' }, ...prev]);
     }
+    setSubmitting(false);
+    setShowModal(false);
+    setForm({ guest_id: '', rating: 0, comment: '' });
   }
 
   return (
@@ -353,89 +303,28 @@ export default function Reviews() {
       ) : (
         <div className="grid gap-4">
           {filtered.map((review) => {
-            const guestName = review.guests?.name || 'Huésped desconocido';
+            const guestName = review.guestName || 'Huésped';
             const initial = guestName[0].toUpperCase();
-            const isReplying = replyingId === review.id;
-
             return (
-              <div
-                key={review.id}
-                className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-zinc-700 transition-colors"
-              >
+              <div key={review.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-zinc-700 transition-colors">
                 <div className="flex items-start gap-3">
-                  {/* Avatar */}
                   <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-sm font-bold text-black shrink-0 mt-0.5">
                     {initial}
                   </div>
-
-                  {/* Body */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      {/* Name + badge */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-white font-medium text-sm">{guestName}</span>
-                        {review.responded ? (
-                          <span className="text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                            Respondida
-                          </span>
-                        ) : (
-                          <span className="text-xs bg-zinc-800 text-zinc-500 border border-zinc-700 px-2 py-0.5 rounded-full">
-                            Sin responder
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {!isReplying && (
-                          <button
-                            onClick={() => setReplyingId(review.id)}
-                            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-emerald-400 transition-colors px-2 py-1 rounded-lg hover:bg-emerald-500/10"
-                            title="Responder"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Responder</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDelete(review.id)}
-                          disabled={deleting === review.id}
-                          className="text-zinc-600 hover:text-red-400 transition-colors disabled:opacity-40 p-1 rounded-lg"
-                          title="Eliminar reseña"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <span className="text-white font-medium text-sm">{guestName}</span>
+                      <button onClick={() => handleDelete(review.id)} disabled={deleting === review.id}
+                        className="text-zinc-600 hover:text-red-400 transition-colors disabled:opacity-40 p-1 rounded-lg shrink-0">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-
-                    {/* Stars + date */}
                     <div className="flex items-center gap-3 mt-1">
                       <StarRating rating={review.rating} size="sm" />
                       <span className="text-zinc-500 text-xs">{formatDate(review.created_at)}</span>
                     </div>
-
-                    {/* Comment */}
                     {review.comment && (
                       <p className="text-zinc-400 text-sm mt-2 leading-relaxed">{review.comment}</p>
-                    )}
-
-                    {/* Existing response text (if responded and not currently editing) */}
-                    {review.responded && review.response_text && !isReplying && (
-                      <div className="mt-3 pt-3 border-t border-zinc-800">
-                        <p className="text-xs text-emerald-400 font-medium uppercase tracking-wider mb-1">
-                          Respuesta del hotel
-                        </p>
-                        <p className="text-zinc-400 text-sm leading-relaxed">{review.response_text}</p>
-                      </div>
-                    )}
-
-                    {/* Inline reply form */}
-                    {isReplying && (
-                      <ReplyForm
-                        review={review}
-                        onSave={handleReplySave}
-                        onCancel={() => setReplyingId(null)}
-                      />
                     )}
                   </div>
                 </div>
