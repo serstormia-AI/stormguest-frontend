@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Save, RotateCcw, Eye, EyeOff, Send, Loader2, CheckCircle, AlertCircle, CreditCard } from 'lucide-react';
+import { Save, RotateCcw, Eye, EyeOff, Send, Loader2, CheckCircle, AlertCircle, CreditCard, Building2, Palette } from 'lucide-react';
 import { getSettings, updateSettings, testNotification } from '../services/api';
+import { supabaseAdmin } from '../lib/supabase';
 
 // Prompt base de Julia — mismo que el backend, para poder restaurarlo
 const BASE_PROMPT_PLACEHOLDER = `Eres Julia, la asistente virtual de este hotel. Tu rol es atender a los huéspedes con calidez, profesionalismo y eficiencia.
@@ -41,6 +42,48 @@ function ConfiguredBadge({ configured }) {
 }
 
 export default function Settings() {
+  // ── Hotel branding ────────────────────────────────────────────
+  const [hotel, setHotel] = useState({ name: '', primary_color: '#C9964A', primary_color_light: '#E2B96E', logo_url: '' });
+  const [hotelId, setHotelId] = useState('');
+  const [hotelSaving, setHotelSaving] = useState(false);
+  const [hotelStatus, setHotelStatus] = useState(null);
+
+  useEffect(() => {
+    const loadHotel = async () => {
+      const slug = localStorage.getItem('hotel_id') || 'demo';
+      const { data } = await supabaseAdmin.from('hotels')
+        .select('id, name, primary_color, primary_color_light, logo_url')
+        .eq('slug', slug).single();
+      if (data) {
+        setHotelId(data.id);
+        setHotel({
+          name: data.name || '',
+          primary_color: data.primary_color || '#C9964A',
+          primary_color_light: data.primary_color_light || '#E2B96E',
+          logo_url: data.logo_url || '',
+        });
+      }
+    };
+    loadHotel();
+  }, []);
+
+  const handleSaveHotel = async () => {
+    if (!hotelId) return;
+    setHotelSaving(true);
+    setHotelStatus(null);
+    const { error } = await supabaseAdmin.from('hotels').update({
+      name: hotel.name,
+      primary_color: hotel.primary_color,
+      primary_color_light: hotel.primary_color_light,
+      logo_url: hotel.logo_url || null,
+    }).eq('id', hotelId);
+    setHotelSaving(false);
+    setHotelStatus(error
+      ? { type: 'error', message: 'Error al guardar: ' + error.message }
+      : { type: 'success', message: 'Datos del hotel actualizados. Recargá la guest app para ver los cambios.' }
+    );
+  };
+
   // ── Prompt de Julia ──────────────────────────────────────────
   const [prompt, setPrompt] = useState('');
   const [promptSaving, setPromptSaving] = useState(false);
@@ -193,6 +236,108 @@ export default function Settings() {
         <p className="text-zinc-400 mt-1 text-sm">
           Personalizá el comportamiento de Julia y la configuración de correo para tu hotel.
         </p>
+      </div>
+
+      {/* ── Card: Hotel Branding ── */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Información del Hotel</h2>
+            <p className="text-zinc-400 text-sm mt-0.5">Nombre, colores y logo que ven los huéspedes en la app.</p>
+          </div>
+          <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ background: hotel.primary_color + '20', border: '1px solid ' + hotel.primary_color + '40' }}>
+            <Building2 className="w-5 h-5" style={{ color: hotel.primary_color }} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4">
+          {/* Nombre */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-zinc-300">Nombre del hotel</label>
+            <input type="text" value={hotel.name}
+              onChange={e => setHotel(h => ({ ...h, name: e.target.value }))}
+              placeholder="Ej: Serstormia Hotel & Suites"
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-600" />
+          </div>
+
+          {/* Colores */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <Palette className="w-3.5 h-3.5" /> Color principal
+              </label>
+              <div className="flex items-center gap-3">
+                <input type="color" value={hotel.primary_color}
+                  onChange={e => setHotel(h => ({ ...h, primary_color: e.target.value }))}
+                  className="w-10 h-10 rounded-lg cursor-pointer border border-zinc-700 bg-zinc-950 p-0.5" />
+                <input type="text" value={hotel.primary_color}
+                  onChange={e => setHotel(h => ({ ...h, primary_color: e.target.value }))}
+                  className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-emerald-600" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <Palette className="w-3.5 h-3.5" /> Color claro
+              </label>
+              <div className="flex items-center gap-3">
+                <input type="color" value={hotel.primary_color_light}
+                  onChange={e => setHotel(h => ({ ...h, primary_color_light: e.target.value }))}
+                  className="w-10 h-10 rounded-lg cursor-pointer border border-zinc-700 bg-zinc-950 p-0.5" />
+                <input type="text" value={hotel.primary_color_light}
+                  onChange={e => setHotel(h => ({ ...h, primary_color_light: e.target.value }))}
+                  className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none focus:border-emerald-600" />
+              </div>
+            </div>
+          </div>
+
+          {/* Logo URL */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-zinc-300">URL del logo</label>
+            <div className="flex items-center gap-3">
+              {hotel.logo_url && (
+                <img src={hotel.logo_url} alt="Logo" className="w-10 h-10 rounded-lg object-contain bg-zinc-800 border border-zinc-700 p-1 flex-shrink-0" />
+              )}
+              <input type="text" value={hotel.logo_url}
+                onChange={e => setHotel(h => ({ ...h, logo_url: e.target.value }))}
+                placeholder="https://... (dejá vacío para usar la inicial del nombre)"
+                className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-600" />
+            </div>
+          </div>
+
+          {/* Preview */}
+          <div className="rounded-xl p-4 border border-zinc-700 bg-zinc-950">
+            <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider">Preview en la app</p>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: hotel.primary_color + '30', border: '1px solid ' + hotel.primary_color + '50' }}>
+                {hotel.logo_url
+                  ? <img src={hotel.logo_url} className="w-6 h-6 object-contain" />
+                  : <span className="font-bold text-lg" style={{ color: hotel.primary_color }}>{hotel.name?.[0] || 'H'}</span>
+                }
+              </div>
+              <div>
+                <p className="font-bold text-white text-sm">{hotel.name || 'Nombre del hotel'}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  {[...Array(5)].map((_, i) => (
+                    <svg key={i} className="w-2.5 h-2.5" viewBox="0 0 24 24" fill={hotel.primary_color}>
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                  ))}
+                  <span className="text-[10px] ml-1" style={{ color: hotel.primary_color + '80' }}>Luxury Collection</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <Alert type={hotelStatus?.type} message={hotelStatus?.message} />
+
+        <button onClick={handleSaveHotel} disabled={hotelSaving}
+          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors">
+          {hotelSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Guardar branding
+        </button>
       </div>
 
       {/* ── Card: Julia ── */}
