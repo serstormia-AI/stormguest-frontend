@@ -5,68 +5,33 @@ import { Search, User, Send, Loader2, MessageSquare, Bot } from 'lucide-react';
 export default function Chat() {
     const [guests, setGuests] = useState([]);
     const [activeGuest, setActiveGuest] = useState(null);
+    const [activeConvId, setActiveConvId] = useState(null);
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
-    const [hotelId, setHotelId] = useState("");
+    const [dbHotelId, setDbHotelId] = useState("");
     const [search, setSearch] = useState("");
 
     const messagesEndRef = useRef(null);
 
-    useEffect(() => { fetchGuestsWithMessages(); }, []);
+    useEffect(() => { fetchGuestsWithConversations(); }, []);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    const fetchGuestsWithMessages = async () => {
-        setLoading(true);
-        const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
-        const { data: hotelData } = await supabaseAdmin.from('hotels').select('id').eq('slug', hotelSlug).single();
-        if (!hotelData) { setLoading(false); return; }
-        setHotelId(hotelData.id);
-
-        // Get distinct guest_ids from messages (only guests who actually chatted)
-        const { data: msgData } = await supabaseAdmin
-            .from('messages')
-            .select('guest_id')
-            .eq('hotel_id', hotelData.id);
-
-        const uniqueGuestIds = [...new Set((msgData || []).map(m => m.guest_id).filter(Boolean))];
-
-        if (uniqueGuestIds.length === 0) {
-            // Fallback: show all guests for the hotel
-            const { data: allGuests } = await supabaseAdmin
-                .from('guests')
-                .select('id, name, email')
-                .eq('hotel_id', hotelData.id);
-            const list = allGuests || [];
-            setGuests(list);
-            if (list.length > 0) selectGuest(list[0].id, hotelData.id, list[0]);
-        } else {
-            const { data: guestsData } = await supabaseAdmin
-                .from('guests')
-                .select('id, name, email')
-                .in('id', uniqueGuestIds);
-            const list = guestsData || [];
-            setGuests(list);
-            if (list.length > 0) selectGuest(list[0].id, hotelData.id, list[0]);
-        }
-        setLoading(false);
-    };
-
-    // Realtime subscription — scoped to active guest
+    // Realtime — scoped to active conversation
     useEffect(() => {
-        if (!activeGuest || !hotelId) return;
+        if (!activeConvId) return;
 
         const channel = supabase
-            .channel(`admin-chat-${activeGuest.id}`)
+            .channel(`admin-chat-${activeConvId}`)
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
                 table: 'messages',
-                filter: `guest_id=eq.${activeGuest.id}`
+                filter: `conversation_id=eq.${activeConvId}`
             }, (payload) => {
                 setMessages(prev => {
                     if (prev.some(m => m.id === payload.new.id)) return prev;
@@ -76,17 +41,71 @@ export default function Chat() {
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [activeGuest?.id, hotelId]);
+    }, [activeConvId]);
 
-    const selectGuest = async (guestId, hId = hotelId, guestObj = null) => {
-        const guest = guestObj ?? guests.find(g => g.id === guestId);
+    const fetchGuestsWithConversations = async () => {
+        setLoading(true);
+        const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
+        const { data: hotelData } = await supabaseAdmin.from('hotels').select('id').eq('slug', hotelSlug).single();
+        if (!hotelData) { setLoading(false); return; }
+
+        setDbHotelId(hotelData.id);
+
+        // conversations table has guest_id and hotel_id
+        const { data: conversations } = await supabaseAdmin
+            .from('conversations')
+            .select('id, guest_id')
+            .eq('hotel_id', hotelData.id)
+            .order('updated_at', { ascending: false });
+
+        if (!conversations || conversations.length === 0) {
+            setLoading(false);
+            return;
+        }
+
+        const uniqueGuestIds = [...new Set(conversations.map(c => c.guest_id).filter(Boolean))];
+
+        const { data: guestsData } = await supabaseAdmin
+            .from('guests')
+            .select('id, name, email')
+            .in('id', uniqueGuestIds);
+
+        const list = guestsData || [];
+        setGuests(list);
+
+        // Auto-select first guest
+        if (list.length > 0) {
+            const firstConv = conversations.find(c => c.guest_id === list[0].id);
+            if (firstConv) {
+                await selectGuest(list[0], firstConv.id);
+            }
+        }
+        setLoading(false);
+    };
+
+    const selectGuest = async (guest, knownConvId = null) => {
         setActiveGuest(guest);
+        setMessages([]);
+
+        // Find the conversation for this guest
+        let convId = knownConvId;
+        if (!convId) {
+            const { data: conv } = await supabaseAdmin
+                .from('conversations')
+                .select('id')
+                .eq('guest_id', guest.id)
+                .eq('hotel_id', dbHotelId)
+                .maybeSingle();
+            convId = conv?.id ?? null;
+        }
+
+        setActiveConvId(convId);
+        if (!convId) return;
 
         const { data } = await supabaseAdmin
             .from('messages')
-            .select('*')
-            .eq('hotel_id', hId)
-            .eq('guest_id', guestId)
+            .select('id, sender, content, created_at')
+            .eq('conversation_id', convId)
             .order('created_at', { ascending: true });
 
         setMessages(data || []);
@@ -94,16 +113,15 @@ export default function Chat() {
 
     const sendMessage = async (e) => {
         e.preventDefault();
-        if (!newMessage.trim() || !activeGuest || sending) return;
+        if (!newMessage.trim() || !activeGuest || !activeConvId || sending) return;
 
         const msgText = newMessage.trim();
         setNewMessage("");
         setSending(true);
 
         await supabaseAdmin.from('messages').insert({
-            hotel_id: hotelId,
-            guest_id: activeGuest.id,
-            sender_type: 'staff',
+            conversation_id: activeConvId,
+            sender: 'staff',
             content: msgText
         });
 
@@ -151,7 +169,7 @@ export default function Chat() {
                             filteredGuests.map(guest => (
                                 <button
                                     key={guest.id}
-                                    onClick={() => selectGuest(guest.id)}
+                                    onClick={() => selectGuest(guest)}
                                     className={`w-full text-left p-4 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors flex items-center space-x-3 ${
                                         activeGuest?.id === guest.id ? 'bg-zinc-800 border-l-2 border-l-emerald-500' : ''
                                     }`}
@@ -186,8 +204,8 @@ export default function Chat() {
                         {/* Messages */}
                         <div className="flex-1 overflow-y-auto p-6 space-y-3">
                             {messages.map((msg, idx) => {
-                                const isStaff = msg.sender_type === 'staff' || msg.sender_type === 'hotel';
-                                const isBot = msg.sender_type === 'bot';
+                                const isStaff = msg.sender === 'staff';
+                                const isBot = msg.sender === 'bot';
                                 const isFromHotel = isStaff || isBot;
                                 return (
                                     <div key={msg.id || idx} className={`flex ${isFromHotel ? 'justify-end' : 'justify-start'}`}>
@@ -227,7 +245,7 @@ export default function Chat() {
                                 />
                                 <button
                                     type="submit"
-                                    disabled={!newMessage.trim() || sending}
+                                    disabled={!newMessage.trim() || sending || !activeConvId}
                                     className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl px-5 flex items-center justify-center transition-colors disabled:opacity-50"
                                 >
                                     {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
