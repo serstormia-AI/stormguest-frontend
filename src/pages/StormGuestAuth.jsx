@@ -184,12 +184,18 @@ function LoginForm({ onLogin }) {
         .eq('email', emailVal.trim().toLowerCase())
         .single();
       if (!profile) throw new Error('Perfil de usuario no encontrado');
-      return { token: authData.session.access_token, role: profile.role, hotel_id: profile.hotel_id, name: profile.name };
+      return { token: authData.session.access_token, role: profile.role, hotel_id: profile.hotel_id, name: profile.name, email: authData.user.email };
     }
 
     // 2. Fall back to Express (legacy bcrypt users)
     const res = await loginUser(emailVal, passwordVal);
     const userData = res.data;
+    // Decode JWT to extract email (no crypto needed — just reading our own token)
+    try {
+      const payload = JSON.parse(atob(userData.token.split('.')[1]));
+      if (payload.email) userData.email = payload.email;
+    } catch {}
+
 
     // Auto-migrate to Supabase Auth silently (fire and forget)
     supabaseAdmin.auth.admin.createUser({
@@ -212,6 +218,7 @@ function LoginForm({ onLogin }) {
       localStorage.setItem('role', userData.role);
       localStorage.setItem('hotel_id', userData.hotel_id);
       localStorage.setItem('name', userData.name);
+      if (userData.email) localStorage.setItem('email', userData.email);
       onLogin(userData);
     } catch (err) {
       setError(err.response?.data?.error || err.message || "Error al conectar con el servidor.");
@@ -230,6 +237,7 @@ function LoginForm({ onLogin }) {
       localStorage.setItem('role', userData.role);
       localStorage.setItem('hotel_id', userData.hotel_id);
       localStorage.setItem('name', userData.name);
+      if (userData.email) localStorage.setItem('email', userData.email);
       onLogin(userData);
     } catch (err) {
       setError(err.response?.data?.error || err.message || "Error al iniciar sesión.");

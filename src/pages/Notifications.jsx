@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, Send, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
-import { supabaseAdmin } from '../lib/supabase';
-import { sendNotification, testNotification } from '../services/api';
+import { supabase, supabaseAdmin } from '../lib/supabase';
 
 const HISTORY_KEY = 'sg_notification_history';
 
@@ -44,31 +43,29 @@ export default function Notifications() {
     if (!form.guest_id || !form.subject || !form.message) return;
     setSending(true);
     try {
-      const res = await sendNotification(form);
+      const hotelId = localStorage.getItem('hotel_id') || 'demo';
+      const { data: res, error } = await supabase.functions.invoke('send-notification', {
+        body: { guest_id: form.guest_id, subject: form.subject, message: form.message, hotel_id: hotelId },
+      });
+      if (error) throw error;
+
       const guest = guests.find(g => g.id === form.guest_id);
-      const entry = {
-        id: Date.now(),
-        to: guest?.name || form.guest_id,
-        subject: form.subject,
-        sent: res.sent !== false,
-        reason: res.reason,
-        at: new Date().toISOString()
-      };
+      const entry = { id: Date.now(), to: guest?.name || form.guest_id, subject: form.subject, sent: res?.sent !== false, reason: res?.reason, at: new Date().toISOString() };
       const newHistory = [entry, ...history];
       setHistory(newHistory);
       saveHistory(newHistory);
 
-      if (res.reason === 'not_configured') {
+      if (res?.reason === 'not_configured') {
         setNotConfigured(true);
-        showFeedback('warn', 'Email enviado pero servidor no configurado.');
-      } else if (res.sent === false) {
-        showFeedback('error', 'No se pudo enviar el email.');
+        showFeedback('warn', 'Configurá RESEND_API_KEY en Supabase Edge Functions para activar emails.');
+      } else if (res?.sent === false) {
+        showFeedback('error', res?.reason || 'No se pudo enviar el email.');
       } else {
         showFeedback('ok', 'Email enviado correctamente.');
         setForm({ guest_id: '', subject: '', message: '' });
       }
-    } catch {
-      showFeedback('error', 'Error al conectar con el servidor.');
+    } catch (err) {
+      showFeedback('error', 'Error al invocar la función de email.');
     } finally {
       setSending(false);
     }
@@ -77,15 +74,20 @@ export default function Notifications() {
   async function handleTest() {
     setTesting(true);
     try {
-      const res = await testNotification();
-      if (res.reason === 'not_configured') {
+      const to = localStorage.getItem('email');
+      if (!to) { showFeedback('warn', 'Cerrá sesión y volvé a entrar para activar el email de prueba.'); setTesting(false); return; }
+      const { data: res, error } = await supabase.functions.invoke('send-notification', {
+        body: { test: true, to },
+      });
+      if (error) throw error;
+      if (res?.reason === 'not_configured') {
         setNotConfigured(true);
-        showFeedback('warn', 'Servidor de email no configurado.');
+        showFeedback('warn', 'Configurá RESEND_API_KEY en Supabase Edge Functions.');
       } else {
-        showFeedback('ok', 'Email de prueba enviado a tu cuenta.');
+        showFeedback('ok', `Email de prueba enviado a ${to}.`);
       }
     } catch {
-      showFeedback('error', 'Error al enviar email de prueba.');
+      showFeedback('error', 'Error al invocar la función de email.');
     } finally {
       setTesting(false);
     }
@@ -114,7 +116,7 @@ export default function Notifications() {
         <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
           <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
           <p className="text-amber-300 text-sm">
-            Configura <code className="bg-zinc-800 px-1 rounded">EMAIL_HOST</code>, <code className="bg-zinc-800 px-1 rounded">EMAIL_USER</code> y <code className="bg-zinc-800 px-1 rounded">EMAIL_PASS</code> en Railway para activar el envío de emails.
+            Configurá <code className="bg-zinc-800 px-1 rounded">RESEND_API_KEY</code> y <code className="bg-zinc-800 px-1 rounded">EMAIL_FROM</code> en Supabase → Edge Functions → Secrets para activar el envío de emails.
           </p>
         </div>
       )}
