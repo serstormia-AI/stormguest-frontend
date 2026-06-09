@@ -4,9 +4,10 @@ import {
   CheckCircle, XCircle, AlertTriangle, Copy, ExternalLink, Plus,
   Server, Clock, ChevronDown, ChevronUp
 } from 'lucide-react';
+import { supabaseAdmin } from '../lib/supabase';
 import {
-  getIntegrations, importCsv, saveIcalUrl, syncIcalNow,
-  saveWebhookConfig, deleteIntegration, savePollingConfig, pollNow, getSyncLogs
+  importCsv, saveIcalUrl, syncIcalNow,
+  saveWebhookConfig, savePollingConfig, pollNow
 } from '../services/api';
 
 const PROVIDERS = ['cloudbeds', 'apaleo', 'beds24', 'little_hotelier', 'otro'];
@@ -64,13 +65,20 @@ export default function Integrations() {
   useEffect(() => { loadIntegrations(); }, []);
 
   async function loadIntegrations() {
-    try {
-      const data = await getIntegrations();
-      setIntegrations(data || []);
-      const ical = data?.find(i => i.type === 'ical');
-      if (ical?.config?.ical_url) setIcalUrl(ical.config.ical_url);
-      if (ical?.provider) setIcalProvider(ical.provider);
-    } catch { /* silently fail */ }
+    const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
+    const { data: hotel } = await supabaseAdmin
+      .from('hotels').select('id').eq('slug', hotelSlug).single();
+    if (!hotel) return;
+    const { data } = await supabaseAdmin
+      .from('hotel_integrations')
+      .select('*')
+      .eq('hotel_id', hotel.id)
+      .order('created_at', { ascending: false });
+    const list = data || [];
+    setIntegrations(list);
+    const ical = list.find(i => i.type === 'ical');
+    if (ical?.config?.ical_url) setIcalUrl(ical.config.ical_url);
+    if (ical?.provider) setIcalProvider(ical.provider);
   }
 
   function show(type, msg) {
@@ -144,13 +152,11 @@ export default function Integrations() {
 
   async function handleDelete(id) {
     if (!window.confirm('¿Eliminar esta integración?')) return;
-    try {
-      await deleteIntegration(id);
-      setIntegrations(prev => prev.filter(i => i.id !== id));
-      show('ok', 'Integración eliminada');
-    } catch {
-      show('error', 'Error al eliminar');
-    }
+    const { error } = await supabaseAdmin
+      .from('hotel_integrations').delete().eq('id', id);
+    if (error) { show('error', 'Error al eliminar'); return; }
+    setIntegrations(prev => prev.filter(i => i.id !== id));
+    show('ok', 'Integración eliminada');
   }
 
   async function handleSavePolling(e) {
@@ -190,16 +196,19 @@ export default function Integrations() {
   async function toggleLogs(id) {
     if (logsOpen === id) { setLogsOpen(null); return; }
     setLogsOpen(id);
-    try {
-      const data = await getSyncLogs(id);
-      setLogs(data || []);
-    } catch { setLogs([]); }
+    const { data } = await supabaseAdmin
+      .from('integration_sync_logs')
+      .select('id, action, synced_at, external_id, detail')
+      .eq('integration_id', id)
+      .order('synced_at', { ascending: false })
+      .limit(50);
+    setLogs(data || []);
   }
 
   const webhookUrl = (slug) =>
     `${API_BASE}/api/integrations/webhook/${slug || ':hotel_slug'}`;
 
-  const hotelSlug = localStorage.getItem('hotel_slug') || '';
+  const hotelSlug = localStorage.getItem('hotel_id') || '';
 
   return (
     <div className="p-8 space-y-8 max-w-4xl">

@@ -3,9 +3,9 @@ import {
     Building2, Users, Plus, Pencil, Trash2, X, ChevronDown, Loader2, AlertCircle,
     CheckCircle, Upload, Link2, Server, Webhook, ArrowRight, ArrowLeft, Plug
 } from 'lucide-react';
+import { supabaseAdmin } from '../lib/supabase';
 import {
-    adminGetHotels, adminCreateHotel, adminUpdateHotel, adminDeleteHotel,
-    adminGetUsers, adminCreateUser, adminUpdateUser, adminDeleteUser,
+    adminCreateUser, adminUpdateUser,
     saveIcalUrl, saveWebhookConfig, savePollingConfig, importCsv,
 } from '../services/api';
 
@@ -142,12 +142,17 @@ function OnboardingWizard({ onClose, onDone }) {
     if (!name.trim() || !slug.trim()) return setError('Nombre y slug son requeridos');
     setLoading(true);
     try {
-      const hotel = await adminCreateHotel({ name: name.trim(), slug: slug.trim() });
-      setHotelId(hotel.id || hotel.hotel?.id);
+      const { data: hotel, error } = await supabaseAdmin
+        .from('hotels')
+        .insert({ name: name.trim(), slug: slug.trim() })
+        .select('id')
+        .single();
+      if (error) throw new Error(error.message);
+      setHotelId(hotel.id);
       setHotelSlug(slug.trim());
       setStep(1);
     } catch (err) {
-      setError(err?.response?.data?.error || 'Error al crear el hotel');
+      setError(err.message || 'Error al crear el hotel');
     } finally {
       setLoading(false);
     }
@@ -389,13 +394,15 @@ function HotelModal({ hotel, onClose, onSaved }) {
         try {
             const payload = { name: name.trim(), slug: slug.trim() };
             if (isEdit) {
-                await adminUpdateHotel(hotel.id, payload);
+                const { error } = await supabaseAdmin.from('hotels').update(payload).eq('id', hotel.id);
+                if (error) throw new Error(error.message);
             } else {
-                await adminCreateHotel(payload);
+                const { error } = await supabaseAdmin.from('hotels').insert(payload);
+                if (error) throw new Error(error.message);
             }
             onSaved();
         } catch (err) {
-            setError(err?.response?.data?.error || 'Error al guardar el hotel');
+            setError(err.message || 'Error al guardar el hotel');
         } finally {
             setLoading(false);
         }
@@ -565,12 +572,15 @@ function HotelsTab({ hotels, loading, onRefresh }) {
 
     async function handleDelete(hotel) {
         if (!window.confirm(`¿Eliminar el hotel "${hotel.name}"? Esta acción no se puede deshacer.`)) return;
-        try {
-            await adminDeleteHotel(hotel.id);
-            onRefresh();
-        } catch (err) {
-            alert(err?.response?.data?.error || 'Error al eliminar el hotel');
+        const { count } = await supabaseAdmin
+            .from('users').select('id', { count: 'exact', head: true }).eq('hotel_id', hotel.id);
+        if (count > 0) {
+            alert(`No se puede eliminar: el hotel tiene ${count} usuario(s) activo(s). Elimínalos primero.`);
+            return;
         }
+        const { error } = await supabaseAdmin.from('hotels').delete().eq('id', hotel.id);
+        if (error) { alert(error.message || 'Error al eliminar el hotel'); return; }
+        onRefresh();
     }
 
     function handleSaved() {
@@ -671,12 +681,9 @@ function UsersTab({ users, hotels, loading, onRefresh }) {
 
     async function handleDelete(user) {
         if (!window.confirm(`¿Eliminar al usuario "${user.name}" (${user.email})? Esta acción no se puede deshacer.`)) return;
-        try {
-            await adminDeleteUser(user.id);
-            onRefresh();
-        } catch (err) {
-            alert(err?.response?.data?.error || 'Error al eliminar el usuario');
-        }
+        const { error } = await supabaseAdmin.from('users').delete().eq('id', user.id);
+        if (error) { alert(error.message || 'Error al eliminar el usuario'); return; }
+        onRefresh();
     }
 
     function handleSaved() {
@@ -783,8 +790,19 @@ export default function SuperAdmin() {
     const fetchHotels = useCallback(async () => {
         setHotelsLoading(true);
         try {
-            const data = await adminGetHotels();
-            setHotels(data);
+            const { data: hotels, error } = await supabaseAdmin
+                .from('hotels')
+                .select('id, slug, name, primary_color, logo_url, created_at')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            const enriched = await Promise.all((hotels || []).map(async (hotel) => {
+                const [{ count: userCount }, { count: guestCount }] = await Promise.all([
+                    supabaseAdmin.from('users').select('id', { count: 'exact', head: true }).eq('hotel_id', hotel.id),
+                    supabaseAdmin.from('guests').select('id', { count: 'exact', head: true }).eq('hotel_id', hotel.id),
+                ]);
+                return { ...hotel, user_count: userCount || 0, guest_count: guestCount || 0 };
+            }));
+            setHotels(enriched);
         } catch (err) {
             console.error('Error cargando hoteles:', err);
         } finally {
@@ -795,8 +813,12 @@ export default function SuperAdmin() {
     const fetchUsers = useCallback(async () => {
         setUsersLoading(true);
         try {
-            const data = await adminGetUsers();
-            setUsers(data);
+            const { data, error } = await supabaseAdmin
+                .from('users')
+                .select('id, name, email, role, hotel_id, created_at')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            setUsers(data || []);
         } catch (err) {
             console.error('Error cargando usuarios:', err);
         } finally {
