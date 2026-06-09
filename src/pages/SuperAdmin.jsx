@@ -473,18 +473,19 @@ function UserModal({ user, hotels, onClose, onSaved }) {
         e.preventDefault();
         setError('');
         if (!form.name.trim() || !form.email.trim()) return setError('Nombre y email son requeridos');
-        if (!isEdit && !form.password.trim()) return setError('La contraseña es requerida');
         setLoading(true);
         try {
+            const email = form.email.trim().toLowerCase();
+            const meta = { name: form.name.trim(), role: form.role, hotel_id: form.hotel_id || null };
+
             if (isEdit) {
                 // Update profile fields in users table
                 const updates = { name: form.name.trim(), role: form.role, hotel_id: form.hotel_id || null };
-                const newEmail = form.email.trim().toLowerCase();
-                if (newEmail !== user.email) updates.email = newEmail;
+                if (email !== user.email) updates.email = email;
                 const { error: profileErr } = await supabaseAdmin.from('users').update(updates).eq('id', user.id);
                 if (profileErr) throw new Error(profileErr.message);
 
-                // If password changed, find auth user by current email and update
+                // If password changed, find auth user and update
                 if (form.password.trim()) {
                     const { data: { users: authUsers } } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 500 });
                     const authUser = authUsers?.find(u => u.email === user.email);
@@ -495,31 +496,38 @@ function UserModal({ user, hotels, onClose, onSaved }) {
                     }
                 }
             } else {
-                // Create in Supabase Auth
-                const { data: { user: authUser }, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-                    email: form.email.trim().toLowerCase(),
-                    password: form.password,
-                    email_confirm: true,
-                    user_metadata: { name: form.name.trim(), role: form.role, hotel_id: form.hotel_id || null },
-                });
-                if (authErr) {
-                    if (authErr.message.includes('already registered') || authErr.message.includes('already been registered')) {
-                        throw new Error('Ya existe un usuario con ese email');
+                let authUserId;
+
+                if (form.password.trim()) {
+                    // Admin sets password → create directly, login works immediately
+                    const { data: { user: authUser }, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+                        email, password: form.password, email_confirm: true, user_metadata: meta,
+                    });
+                    if (authErr) {
+                        if (authErr.message.includes('already')) throw new Error('Ya existe un usuario con ese email');
+                        throw new Error(authErr.message);
                     }
-                    throw new Error(authErr.message);
+                    authUserId = authUser.id;
+                } else {
+                    // No password → send invite email, user sets their own password
+                    const { data: { user: authUser }, error: authErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+                        email,
+                        { data: meta, redirectTo: `${window.location.origin}/login` }
+                    );
+                    if (authErr) {
+                        if (authErr.message.includes('already')) throw new Error('Ya existe un usuario con ese email');
+                        throw new Error(authErr.message);
+                    }
+                    authUserId = authUser.id;
                 }
 
                 // Insert profile in users table
                 const { error: profileErr } = await supabaseAdmin.from('users').insert({
-                    name: form.name.trim(),
-                    email: form.email.trim().toLowerCase(),
-                    password_hash: 'supabase_auth',
-                    role: form.role,
-                    hotel_id: form.hotel_id || null,
+                    name: form.name.trim(), email, password_hash: 'supabase_auth',
+                    role: form.role, hotel_id: form.hotel_id || null,
                 });
                 if (profileErr) {
-                    // Rollback auth user if profile insert fails
-                    await supabaseAdmin.auth.admin.deleteUser(authUser.id).catch(() => {});
+                    await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
                     if (profileErr.code === '23505') throw new Error('Ya existe un usuario con ese email');
                     throw new Error(profileErr.message);
                 }
@@ -541,14 +549,19 @@ function UserModal({ user, hotels, onClose, onSaved }) {
                 <Field label="Email">
                     <input className={inputCls} type="email" placeholder="ana@hotel.com" value={form.email} onChange={set('email')} />
                 </Field>
-                <Field label={isEdit ? 'Nueva contraseña (opcional)' : 'Contraseña'}>
+                <Field label="Contraseña">
                     <input
                         className={inputCls}
                         type="password"
-                        placeholder={isEdit ? 'Dejar en blanco para no cambiar' : 'Mínimo 8 caracteres'}
+                        placeholder={isEdit ? 'Dejar en blanco para no cambiar' : 'Vacío = enviar invitación por email'}
                         value={form.password}
                         onChange={set('password')}
                     />
+                    {!isEdit && !form.password && (
+                        <p className="text-xs text-zinc-500 mt-1">
+                            Sin contraseña: el usuario recibirá un email para crear la suya.
+                        </p>
+                    )}
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                     <Field label="Rol">
