@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, Send, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
-import { getGuests, sendNotification, testNotification } from '../services/api';
+import { supabaseAdmin } from '../lib/supabase';
+import { sendNotification, testNotification } from '../services/api';
 
 const HISTORY_KEY = 'sg_notification_history';
 
@@ -21,7 +22,16 @@ export default function Notifications() {
   const [notConfigured, setNotConfigured] = useState(false);
 
   useEffect(() => {
-    getGuests().then(data => setGuests(data || [])).catch(() => {});
+    async function fetchGuests() {
+      const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
+      const { data: hotel } = await supabaseAdmin
+        .from('hotels').select('id').eq('slug', hotelSlug).single();
+      if (!hotel) return;
+      const { data } = await supabaseAdmin
+        .from('guests').select('id, name, email').eq('hotel_id', hotel.id).order('name');
+      setGuests(data || []);
+    }
+    fetchGuests();
   }, []);
 
   function showFeedback(type, msg) {
