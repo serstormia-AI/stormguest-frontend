@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../services/api";
+import { supabase, supabaseAdmin } from "../lib/supabase";
 
 // ============================================================
 // SER STORM AI SOLUTIONS — AUTH SYSTEM
@@ -169,22 +170,51 @@ function LoginForm({ onLogin }) {
   const [showPass, setShowPass] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
 
+  async function performLogin(emailVal, passwordVal) {
+    // 1. Try Supabase Auth (users migrated or created via new flow)
+    const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+      email: emailVal.trim().toLowerCase(),
+      password: passwordVal,
+    });
+
+    if (!authErr && authData?.user) {
+      const { data: profile } = await supabaseAdmin
+        .from('users')
+        .select('role, hotel_id, name')
+        .eq('email', emailVal.trim().toLowerCase())
+        .single();
+      if (!profile) throw new Error('Perfil de usuario no encontrado');
+      return { token: authData.session.access_token, role: profile.role, hotel_id: profile.hotel_id, name: profile.name };
+    }
+
+    // 2. Fall back to Express (legacy bcrypt users)
+    const res = await loginUser(emailVal, passwordVal);
+    const userData = res.data;
+
+    // Auto-migrate to Supabase Auth silently (fire and forget)
+    supabaseAdmin.auth.admin.createUser({
+      email: emailVal.trim().toLowerCase(),
+      password: passwordVal,
+      email_confirm: true,
+      user_metadata: { name: userData.name, role: userData.role, hotel_id: userData.hotel_id },
+    }).catch(() => {});
+
+    return userData;
+  }
+
   const handleSubmit = async () => {
     if (!email || !password) { setError("Completá todos los campos"); return; }
     setLoading(true);
     setError("");
-
     try {
-      const res = await loginUser(email, password);
-      // Save data to localStorage
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('role', res.data.role);
-      localStorage.setItem('hotel_id', res.data.hotel_id);
-      localStorage.setItem('name', res.data.name);
-
-      onLogin(res.data);
+      const userData = await performLogin(email, password);
+      localStorage.setItem('token', userData.token);
+      localStorage.setItem('role', userData.role);
+      localStorage.setItem('hotel_id', userData.hotel_id);
+      localStorage.setItem('name', userData.name);
+      onLogin(userData);
     } catch (err) {
-      setError(err.response?.data?.error || "Error al conectar con el servidor. Revisá Console.");
+      setError(err.response?.data?.error || err.message || "Error al conectar con el servidor.");
       setLoading(false);
     }
   };
@@ -194,16 +224,15 @@ function LoginForm({ onLogin }) {
     setPassword(user.password);
     setDemoOpen(false);
     setLoading(true);
-
     try {
-      const res = await loginUser(user.email, user.password);
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('role', res.data.role);
-      localStorage.setItem('hotel_id', res.data.hotel_id);
-      localStorage.setItem('name', res.data.name);
-      onLogin(res.data);
+      const userData = await performLogin(user.email, user.password);
+      localStorage.setItem('token', userData.token);
+      localStorage.setItem('role', userData.role);
+      localStorage.setItem('hotel_id', userData.hotel_id);
+      localStorage.setItem('name', userData.name);
+      onLogin(userData);
     } catch (err) {
-      setError(err.response?.data?.error || "Error al iniciar sesión.");
+      setError(err.response?.data?.error || err.message || "Error al iniciar sesión.");
       setLoading(false);
     }
   };

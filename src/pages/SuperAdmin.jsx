@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { supabaseAdmin } from '../lib/supabase';
 import {
-    adminCreateUser, adminUpdateUser,
     saveIcalUrl, saveWebhookConfig, savePollingConfig, importCsv,
 } from '../services/api';
 
@@ -473,30 +472,61 @@ function UserModal({ user, hotels, onClose, onSaved }) {
     async function handleSubmit(e) {
         e.preventDefault();
         setError('');
-        if (!form.name.trim() || !form.email.trim()) {
-            return setError('Nombre y email son requeridos');
-        }
-        if (!isEdit && !form.password.trim()) {
-            return setError('La contraseña es requerida');
-        }
+        if (!form.name.trim() || !form.email.trim()) return setError('Nombre y email son requeridos');
+        if (!isEdit && !form.password.trim()) return setError('La contraseña es requerida');
         setLoading(true);
         try {
-            const payload = {
-                name:     form.name.trim(),
-                email:    form.email.trim(),
-                role:     form.role,
-                hotel_id: form.hotel_id || null,
-            };
-            if (form.password.trim()) payload.password = form.password;
-
             if (isEdit) {
-                await adminUpdateUser(user.id, payload);
+                // Update profile fields in users table
+                const updates = { name: form.name.trim(), role: form.role, hotel_id: form.hotel_id || null };
+                const newEmail = form.email.trim().toLowerCase();
+                if (newEmail !== user.email) updates.email = newEmail;
+                const { error: profileErr } = await supabaseAdmin.from('users').update(updates).eq('id', user.id);
+                if (profileErr) throw new Error(profileErr.message);
+
+                // If password changed, find auth user by current email and update
+                if (form.password.trim()) {
+                    const { data: { users: authUsers } } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 500 });
+                    const authUser = authUsers?.find(u => u.email === user.email);
+                    if (authUser) {
+                        const authUpdates = { password: form.password };
+                        if (updates.email) authUpdates.email = updates.email;
+                        await supabaseAdmin.auth.admin.updateUserById(authUser.id, authUpdates);
+                    }
+                }
             } else {
-                await adminCreateUser(payload);
+                // Create in Supabase Auth
+                const { data: { user: authUser }, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+                    email: form.email.trim().toLowerCase(),
+                    password: form.password,
+                    email_confirm: true,
+                    user_metadata: { name: form.name.trim(), role: form.role, hotel_id: form.hotel_id || null },
+                });
+                if (authErr) {
+                    if (authErr.message.includes('already registered') || authErr.message.includes('already been registered')) {
+                        throw new Error('Ya existe un usuario con ese email');
+                    }
+                    throw new Error(authErr.message);
+                }
+
+                // Insert profile in users table
+                const { error: profileErr } = await supabaseAdmin.from('users').insert({
+                    name: form.name.trim(),
+                    email: form.email.trim().toLowerCase(),
+                    password_hash: 'supabase_auth',
+                    role: form.role,
+                    hotel_id: form.hotel_id || null,
+                });
+                if (profileErr) {
+                    // Rollback auth user if profile insert fails
+                    await supabaseAdmin.auth.admin.deleteUser(authUser.id).catch(() => {});
+                    if (profileErr.code === '23505') throw new Error('Ya existe un usuario con ese email');
+                    throw new Error(profileErr.message);
+                }
             }
             onSaved();
         } catch (err) {
-            setError(err?.response?.data?.error || 'Error al guardar el usuario');
+            setError(err.message || 'Error al guardar el usuario');
         } finally {
             setLoading(false);
         }
@@ -681,8 +711,15 @@ function UsersTab({ users, hotels, loading, onRefresh }) {
 
     async function handleDelete(user) {
         if (!window.confirm(`¿Eliminar al usuario "${user.name}" (${user.email})? Esta acción no se puede deshacer.`)) return;
+        // Delete from users table
         const { error } = await supabaseAdmin.from('users').delete().eq('id', user.id);
         if (error) { alert(error.message || 'Error al eliminar el usuario'); return; }
+        // Also remove from Supabase Auth (fire and forget — may not exist yet)
+        supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 500 })
+            .then(({ data: { users: authUsers } }) => {
+                const authUser = authUsers?.find(u => u.email === user.email);
+                if (authUser) supabaseAdmin.auth.admin.deleteUser(authUser.id).catch(() => {});
+            }).catch(() => {});
         onRefresh();
     }
 
