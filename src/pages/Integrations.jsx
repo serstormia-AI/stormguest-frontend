@@ -422,7 +422,7 @@ export default function Integrations() {
                     <Badge active={i.active} />
                     <div>
                       <p className="text-white text-sm font-medium capitalize">
-                        {i.type === 'api_polling' ? 'API Polling' : i.type} {i.provider ? `— ${i.provider}` : ''}
+                        {i.type === 'api' ? 'API Polling' : i.type} {i.provider ? `— ${i.provider}` : ''}
                       </p>
                       {i.last_sync && (
                         <p className="text-zinc-500 text-xs flex items-center gap-1">
@@ -436,7 +436,7 @@ export default function Integrations() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {i.type === 'api_polling' && (
+                    {i.type === 'api' && (
                       <button onClick={() => handlePollNow(i.id)} disabled={loading[`poll_${i.id}`]}
                         className="text-xs px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50">
                         {loading[`poll_${i.id}`] ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
