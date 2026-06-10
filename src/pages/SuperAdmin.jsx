@@ -485,14 +485,13 @@ function UserModal({ user, hotels, onClose, onSaved }) {
                 const { error: profileErr } = await supabaseAdmin.from('users').update(updates).eq('id', user.id);
                 if (profileErr) throw new Error(profileErr.message);
 
-                // If password changed, find auth user and update
+                // If password changed, update auth user directly via stored auth_user_id
                 if (form.password.trim()) {
-                    const { data: { users: authUsers } } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 500 });
-                    const authUser = authUsers?.find(u => u.email === user.email);
-                    if (authUser) {
+                    const authId = user.auth_user_id;
+                    if (authId) {
                         const authUpdates = { password: form.password };
                         if (updates.email) authUpdates.email = updates.email;
-                        await supabaseAdmin.auth.admin.updateUserById(authUser.id, authUpdates);
+                        await supabaseAdmin.auth.admin.updateUserById(authId, authUpdates);
                     }
                 }
             } else {
@@ -525,6 +524,7 @@ function UserModal({ user, hotels, onClose, onSaved }) {
                 const { error: profileErr } = await supabaseAdmin.from('users').insert({
                     name: form.name.trim(), email, password_hash: 'supabase_auth',
                     role: form.role, hotel_id: form.hotel_id || null,
+                    auth_user_id: authUserId,
                 });
                 if (profileErr) {
                     await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
@@ -727,12 +727,10 @@ function UsersTab({ users, hotels, loading, onRefresh }) {
         // Delete from users table
         const { error } = await supabaseAdmin.from('users').delete().eq('id', user.id);
         if (error) { alert(error.message || 'Error al eliminar el usuario'); return; }
-        // Also remove from Supabase Auth (fire and forget — may not exist yet)
-        supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 500 })
-            .then(({ data: { users: authUsers } }) => {
-                const authUser = authUsers?.find(u => u.email === user.email);
-                if (authUser) supabaseAdmin.auth.admin.deleteUser(authUser.id).catch(() => {});
-            }).catch(() => {});
+        // Also remove from Supabase Auth (fire and forget)
+        if (user.auth_user_id) {
+            supabaseAdmin.auth.admin.deleteUser(user.auth_user_id).catch(() => {});
+        }
         onRefresh();
     }
 
@@ -845,12 +843,20 @@ export default function SuperAdmin() {
                 .select('id, slug, name, primary_color, logo_url, created_at')
                 .order('created_at', { ascending: false });
             if (error) throw error;
-            const enriched = await Promise.all((hotels || []).map(async (hotel) => {
-                const [{ count: userCount }, { count: guestCount }] = await Promise.all([
-                    supabaseAdmin.from('users').select('id', { count: 'exact', head: true }).eq('hotel_id', hotel.id),
-                    supabaseAdmin.from('guests').select('id', { count: 'exact', head: true }).eq('hotel_id', hotel.id),
-                ]);
-                return { ...hotel, user_count: userCount || 0, guest_count: guestCount || 0 };
+            // 2 queries total instead of N×2 — fetch all counts for these hotel IDs at once
+            const hotelIds = (hotels || []).map(h => h.id);
+            const [{ data: userRows }, { data: guestRows }] = await Promise.all([
+                supabaseAdmin.from('users').select('hotel_id').in('hotel_id', hotelIds),
+                supabaseAdmin.from('guests').select('hotel_id').in('hotel_id', hotelIds),
+            ]);
+            const userCountMap = {};
+            userRows?.forEach(r => { userCountMap[r.hotel_id] = (userCountMap[r.hotel_id] || 0) + 1; });
+            const guestCountMap = {};
+            guestRows?.forEach(r => { guestCountMap[r.hotel_id] = (guestCountMap[r.hotel_id] || 0) + 1; });
+            const enriched = (hotels || []).map(hotel => ({
+                ...hotel,
+                user_count: userCountMap[hotel.id] || 0,
+                guest_count: guestCountMap[hotel.id] || 0,
             }));
             setHotels(enriched);
         } catch (err) {
@@ -865,7 +871,7 @@ export default function SuperAdmin() {
         try {
             const { data, error } = await supabaseAdmin
                 .from('users')
-                .select('id, name, email, role, hotel_id, created_at')
+                .select('id, name, email, role, hotel_id, auth_user_id, created_at')
                 .order('created_at', { ascending: false });
             if (error) throw error;
             setUsers(data || []);

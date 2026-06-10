@@ -317,8 +317,8 @@ function LoginForm({ onLogin }) {
         </div>
       </div>
 
-      {/* Demo accounts */}
-      <div style={{ marginTop: 20 }}>
+      {/* Demo accounts — solo en desarrollo, nunca en producción */}
+      {import.meta.env.DEV && <div style={{ marginTop: 20 }}>
         <button onClick={() => setDemoOpen(!demoOpen)}
           style={{ width: "100%", background: "rgba(26,143,255,0.06)", border: "1px solid rgba(26,143,255,0.2)", borderRadius: 11, padding: "11px", color: "var(--blue2)", fontSize: 13, fontWeight: 600 }}>
           {demoOpen ? "▲" : "▼"} Ver cuentas de demo (Testing)
@@ -346,7 +346,7 @@ function LoginForm({ onLogin }) {
             })}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Footer */}
       <div style={{ textAlign: "center", marginTop: 28, fontSize: 11, color: "var(--text3)" }}>
