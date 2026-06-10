@@ -197,12 +197,19 @@ function LoginForm({ onLogin }) {
     } catch {}
 
 
-    // Auto-migrate to Supabase Auth silently (fire and forget)
+    // Auto-migrate to Supabase Auth silently — guardar auth_user_id resultante
     supabaseAdmin.auth.admin.createUser({
       email: emailVal.trim().toLowerCase(),
       password: passwordVal,
       email_confirm: true,
       user_metadata: { name: userData.name, role: userData.role, hotel_id: userData.hotel_id },
+    }).then(({ data }) => {
+      if (data?.user?.id) {
+        supabaseAdmin.from('users')
+          .update({ auth_user_id: data.user.id })
+          .eq('email', emailVal.trim().toLowerCase())
+          .catch(() => {});
+      }
     }).catch(() => {});
 
     return userData;
