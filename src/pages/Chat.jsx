@@ -11,6 +11,7 @@ export default function Chat() {
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [dbHotelId, setDbHotelId] = useState("");
+    const [conciergeName, setConciergeName] = useState("Julia");
     const [search, setSearch] = useState("");
 
     const messagesEndRef = useRef(null);
@@ -21,7 +22,7 @@ export default function Chat() {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    // Realtime — scoped to active conversation
+    // Realtime — new messages in active conversation
     useEffect(() => {
         if (!activeConvId) return;
 
@@ -43,15 +44,38 @@ export default function Chat() {
         return () => { supabase.removeChannel(channel); };
     }, [activeConvId]);
 
+    // Realtime — new conversations (new guests starting a chat)
+    useEffect(() => {
+        if (!dbHotelId) return;
+
+        const channel = supabase
+            .channel(`admin-conversations-${dbHotelId}`)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'conversations',
+                filter: `hotel_id=eq.${dbHotelId}`
+            }, () => {
+                fetchGuestsWithConversations();
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [dbHotelId]);
+
     const fetchGuestsWithConversations = async () => {
         setLoading(true);
         const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
-        const { data: hotelData } = await supabaseAdmin.from('hotels').select('id').eq('slug', hotelSlug).single();
+        const { data: hotelData } = await supabaseAdmin
+            .from('hotels')
+            .select('id, concierge_name')
+            .eq('slug', hotelSlug)
+            .single();
         if (!hotelData) { setLoading(false); return; }
 
         setDbHotelId(hotelData.id);
+        if (hotelData.concierge_name) setConciergeName(hotelData.concierge_name);
 
-        // conversations table has guest_id and hotel_id
         const { data: conversations } = await supabaseAdmin
             .from('conversations')
             .select('id, guest_id')
@@ -73,28 +97,28 @@ export default function Chat() {
         const list = guestsData || [];
         setGuests(list);
 
-        // Auto-select first guest
-        if (list.length > 0) {
+        // Auto-select first guest only on initial load
+        if (list.length > 0 && !activeGuest) {
             const firstConv = conversations.find(c => c.guest_id === list[0].id);
             if (firstConv) {
-                await selectGuest(list[0], firstConv.id);
+                await selectGuest(list[0], firstConv.id, hotelData.id);
             }
         }
         setLoading(false);
     };
 
-    const selectGuest = async (guest, knownConvId = null) => {
+    const selectGuest = async (guest, knownConvId = null, hotelIdOverride = null) => {
         setActiveGuest(guest);
         setMessages([]);
 
-        // Find the conversation for this guest
+        const hotelId = hotelIdOverride || dbHotelId;
         let convId = knownConvId;
         if (!convId) {
             const { data: conv } = await supabaseAdmin
                 .from('conversations')
                 .select('id')
                 .eq('guest_id', guest.id)
-                .eq('hotel_id', dbHotelId)
+                .eq('hotel_id', hotelId)
                 .maybeSingle();
             convId = conv?.id ?? null;
         }
@@ -221,7 +245,7 @@ export default function Chat() {
                                                     ? 'bg-purple-900/60 border border-purple-500/20 text-purple-100 rounded-tl-sm'
                                                     : 'bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-tl-sm'
                                         }`}>
-                                            {isBot && <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider mb-1">Julia AI</p>}
+                                            {isBot && <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider mb-1">{conciergeName} AI</p>}
                                             {msg.content}
                                         </div>
                                     </div>
