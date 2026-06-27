@@ -26,7 +26,7 @@ export default function Chat() {
     useEffect(() => {
         if (!activeConvId) return;
 
-        const channel = supabase
+        const channel = supabaseAdmin
             .channel(`admin-chat-${activeConvId}`)
             .on('postgres_changes', {
                 event: 'INSERT',
@@ -41,14 +41,14 @@ export default function Chat() {
             })
             .subscribe();
 
-        return () => { supabase.removeChannel(channel); };
+        return () => { supabaseAdmin.removeChannel(channel); };
     }, [activeConvId]);
 
     // Realtime — new conversations (new guests starting a chat)
     useEffect(() => {
         if (!dbHotelId) return;
 
-        const channel = supabase
+        const channel = supabaseAdmin
             .channel(`admin-conversations-${dbHotelId}`)
             .on('postgres_changes', {
                 event: 'INSERT',
@@ -60,7 +60,7 @@ export default function Chat() {
             })
             .subscribe();
 
-        return () => { supabase.removeChannel(channel); };
+        return () => { supabaseAdmin.removeChannel(channel); };
     }, [dbHotelId]);
 
     const fetchGuestsWithConversations = async () => {
