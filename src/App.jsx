@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail, Cog, Shield, Plug, ChevronDown } from 'lucide-react';
 import { supabase, supabaseAdmin } from './lib/supabase';
@@ -223,22 +223,20 @@ function Layout({ children }) {
 function RecoveryRedirect() {
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // Handle hash-based recovery (implicit flow)
+  useLayoutEffect(() => {
+    // Runs before <Navigate> in PrivateRoute so the hash/search is still intact
     const hash = window.location.hash;
     if (hash.includes('type=recovery')) {
       navigate('/reset-password' + hash, { replace: true });
       return;
     }
 
-    // Handle PKCE flow (code in query params)
     const params = new URLSearchParams(window.location.search);
-    if (params.get('type') === 'recovery' || params.get('code')) {
-      navigate('/reset-password' + window.location.search + window.location.hash, { replace: true });
+    if (params.get('type') === 'recovery' || (params.get('code') && !window.location.pathname.startsWith('/reset-password'))) {
+      navigate('/reset-password' + window.location.search + hash, { replace: true });
       return;
     }
 
-    // Listen for Supabase auth state (catches both flows)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         navigate('/reset-password', { replace: true });
