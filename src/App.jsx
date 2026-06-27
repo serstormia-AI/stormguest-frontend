@@ -4,6 +4,7 @@ import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOu
 import { supabaseAdmin } from './lib/supabase';
 
 import StormGuestAuth from './pages/StormGuestAuth';
+import ResetPassword from './pages/ResetPassword';
 import Catalog from './pages/Catalog';
 import CheckIns from './pages/CheckIns';
 import Chat from './pages/Chat';
@@ -223,8 +224,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Ruta pública */}
+        {/* Rutas públicas */}
         <Route path="/login" element={<StormGuestAuth />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Rutas protegidas — todos los roles autenticados */}
         <Route path="/" element={<PrivateRoute><RoleRoute path="/"><Layout><Dashboard /></Layout></RoleRoute></PrivateRoute>} />
