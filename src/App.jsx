@@ -222,12 +222,32 @@ function Layout({ children }) {
 // ── Recovery redirect handler ─────────────────────────────────
 function RecoveryRedirect() {
   const navigate = useNavigate();
+
   useEffect(() => {
+    // Handle hash-based recovery (implicit flow)
     const hash = window.location.hash;
     if (hash.includes('type=recovery')) {
       navigate('/reset-password' + hash, { replace: true });
+      return;
     }
+
+    // Handle PKCE flow (code in query params)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('type') === 'recovery' || params.get('code')) {
+      navigate('/reset-password' + window.location.search + window.location.hash, { replace: true });
+      return;
+    }
+
+    // Listen for Supabase auth state (catches both flows)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        navigate('/reset-password', { replace: true });
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
   return null;
 }
 
