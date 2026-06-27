@@ -219,10 +219,23 @@ function Layout({ children }) {
   );
 }
 
+// ── Recovery redirect handler ─────────────────────────────────
+function RecoveryRedirect() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery')) {
+      navigate('/reset-password' + hash, { replace: true });
+    }
+  }, []);
+  return null;
+}
+
 // ── App ───────────────────────────────────────────────────────
 export default function App() {
   return (
     <BrowserRouter>
+      <RecoveryRedirect />
       <Routes>
         {/* Rutas públicas */}
         <Route path="/login" element={<StormGuestAuth />} />
