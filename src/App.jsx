@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail, Cog, Shield, Plug, ChevronDown } from 'lucide-react';
-import { supabaseAdmin } from './lib/supabase';
+import { supabase, supabaseAdmin } from './lib/supabase';
 
 import StormGuestAuth from './pages/StormGuestAuth';
 import ResetPassword from './pages/ResetPassword';
