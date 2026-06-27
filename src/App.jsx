@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail, Cog, Shield, Plug } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Ticket, ShoppingBag, Bell, LogOut, Search, Star, CreditCard, Mail, Cog, Shield, Plug, ChevronDown } from 'lucide-react';
+import { supabaseAdmin } from './lib/supabase';
 
 import StormGuestAuth from './pages/StormGuestAuth';
 import Catalog from './pages/Catalog';
@@ -57,6 +58,47 @@ function RoleRoute({ path, children }) {
   // reception no tiene dashboard — redirigir a su primera pantalla
   const fallback = role === 'reception' ? '/checkins' : '/';
   return <Navigate to={fallback} replace />;
+}
+
+// ── Hotel selector (solo super_admin) ────────────────────────
+function HotelSelector() {
+  const [hotels, setHotels] = useState([]);
+  const [current, setCurrent] = useState(localStorage.getItem('hotel_id') || '');
+
+  useEffect(() => {
+    supabaseAdmin.from('hotels').select('id, name, slug').order('name').then(({ data }) => {
+      setHotels(data || []);
+      if (!current && data?.length > 0) {
+        localStorage.setItem('hotel_id', data[0].slug);
+        setCurrent(data[0].slug);
+      }
+    });
+  }, []);
+
+  const handleChange = (e) => {
+    localStorage.setItem('hotel_id', e.target.value);
+    window.location.reload();
+  };
+
+  return (
+    <div className="flex items-center gap-2 bg-zinc-900/50 px-3 py-1.5 rounded-lg border border-zinc-800">
+      <span className="text-sm text-zinc-400">Hotel:</span>
+      <div className="relative flex items-center">
+        <select
+          value={current}
+          onChange={handleChange}
+          className="appearance-none bg-transparent text-sm font-bold text-white uppercase tracking-wide pr-5 focus:outline-none cursor-pointer"
+        >
+          {hotels.map(h => (
+            <option key={h.id} value={h.slug} className="bg-zinc-900 normal-case font-normal">
+              {h.name}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="w-3 h-3 text-zinc-400 absolute right-0 pointer-events-none" />
+      </div>
+    </div>
+  );
 }
 
 // ── Layout principal ──────────────────────────────────────────
@@ -132,12 +174,17 @@ function Layout({ children }) {
           </div>
 
           <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-3 bg-zinc-900/50 px-3 py-1.5 rounded-lg border border-zinc-800">
-              <span className="text-sm text-zinc-400">Hotel:</span>
-              <span className="text-sm font-bold text-white uppercase tracking-wide">
-                {localStorage.getItem('hotel_id') || 'demo'}
-              </span>
-            </div>
+            {role === 'super_admin'
+              ? <HotelSelector />
+              : (
+                <div className="flex items-center space-x-3 bg-zinc-900/50 px-3 py-1.5 rounded-lg border border-zinc-800">
+                  <span className="text-sm text-zinc-400">Hotel:</span>
+                  <span className="text-sm font-bold text-white uppercase tracking-wide">
+                    {localStorage.getItem('hotel_id') || 'demo'}
+                  </span>
+                </div>
+              )
+            }
 
             <button className="relative text-zinc-400 hover:text-white transition-colors">
               <Bell className="w-5 h-5" />
