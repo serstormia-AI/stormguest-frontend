@@ -63,14 +63,15 @@ function RoleRoute({ path, children }) {
 // ── Hotel selector (solo super_admin) ────────────────────────
 function HotelSelector() {
   const [hotels, setHotels] = useState([]);
-  const [current, setCurrent] = useState(localStorage.getItem('hotel_id') || '');
+  const raw = localStorage.getItem('hotel_id');
+  const [current, setCurrent] = useState((!raw || raw === 'null') ? '' : raw);
 
   useEffect(() => {
     supabaseAdmin.from('hotels').select('id, name, slug').order('name').then(({ data }) => {
       setHotels(data || []);
       if (!current && data?.length > 0) {
         localStorage.setItem('hotel_id', data[0].slug);
-        setCurrent(data[0].slug);
+        window.location.reload();
       }
     });
   }, []);
