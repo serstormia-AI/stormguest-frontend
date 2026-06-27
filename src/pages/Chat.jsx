@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase, supabaseAdmin } from '../lib/supabase';
-import { Search, User, Send, Loader2, MessageSquare, Bot } from 'lucide-react';
+import { Search, Send, Loader2, MessageSquare, Bot, User, Sparkles } from 'lucide-react';
 
 export default function Chat() {
     const [guests, setGuests] = useState([]);
@@ -12,6 +12,7 @@ export default function Chat() {
     const [sending, setSending] = useState(false);
     const [dbHotelId, setDbHotelId] = useState("");
     const [conciergeName, setConciergeName] = useState("Julia");
+    const [convMode, setConvMode] = useState('bot');
     const [search, setSearch] = useState("");
 
     const messagesEndRef = useRef(null);
@@ -113,17 +114,28 @@ export default function Chat() {
 
         const hotelId = hotelIdOverride || dbHotelId;
         let convId = knownConvId;
+        let mode = 'bot';
+
         if (!convId) {
             const { data: conv } = await supabaseAdmin
                 .from('conversations')
-                .select('id')
+                .select('id, mode')
                 .eq('guest_id', guest.id)
                 .eq('hotel_id', hotelId)
                 .maybeSingle();
             convId = conv?.id ?? null;
+            mode = conv?.mode ?? 'bot';
+        } else {
+            const { data: conv } = await supabaseAdmin
+                .from('conversations')
+                .select('mode')
+                .eq('id', convId)
+                .single();
+            mode = conv?.mode ?? 'bot';
         }
 
         setActiveConvId(convId);
+        setConvMode(mode);
         if (!convId) return;
 
         const { data } = await supabaseAdmin
@@ -133,6 +145,13 @@ export default function Chat() {
             .order('created_at', { ascending: true });
 
         setMessages(data || []);
+    };
+
+    const toggleMode = async () => {
+        if (!activeConvId) return;
+        const newMode = convMode === 'bot' ? 'human' : 'bot';
+        await supabaseAdmin.from('conversations').update({ mode: newMode }).eq('id', activeConvId);
+        setConvMode(newMode);
     };
 
     const sendMessage = async (e) => {
@@ -219,10 +238,23 @@ export default function Chat() {
                             <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mr-3 text-xs font-bold text-emerald-400">
                                 {getInitials(activeGuest.name)}
                             </div>
-                            <div>
+                            <div className="flex-1">
                                 <h2 className="font-bold text-zinc-100">{activeGuest.name}</h2>
                                 <p className="text-xs text-emerald-500">Huésped activo</p>
                             </div>
+                            <button
+                                onClick={toggleMode}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                                    convMode === 'bot'
+                                        ? 'bg-purple-500/20 border border-purple-500/40 text-purple-300 hover:bg-purple-500/30'
+                                        : 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
+                                }`}
+                            >
+                                {convMode === 'bot'
+                                    ? <><Sparkles className="w-3.5 h-3.5" /> Bot activo</>
+                                    : <><User className="w-3.5 h-3.5" /> Atención humana</>
+                                }
+                            </button>
                         </div>
 
                         {/* Messages */}
