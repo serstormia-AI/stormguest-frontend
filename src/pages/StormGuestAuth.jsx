@@ -169,6 +169,20 @@ function LoginForm({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email) { setError("Ingresá tu email primero."); return; }
+    setResetLoading(true);
+    setError("");
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: "https://stormguest-frontend.vercel.app/reset-password",
+    });
+    setResetLoading(false);
+    if (resetErr) { setError(resetErr.message); return; }
+    setResetSent(true);
+  };
 
   async function performLogin(emailVal, passwordVal) {
     // 1. Try Supabase Auth (users migrated or created via new flow)
@@ -318,9 +332,19 @@ function LoginForm({ onLogin }) {
 
         {/* Forgot */}
         <div style={{ textAlign: "center", marginTop: 16 }}>
-          <button style={{ background: "none", border: "none", color: "var(--text3)", fontSize: 12 }} onClick={() => alert("Contactá a Ser Storm AI para restablecer tu contraseña.\nWhatsApp: +54 9 ...")}>
-            ¿Olvidaste tu contraseña?
-          </button>
+          {resetSent ? (
+            <div style={{ fontSize: 13, color: "var(--green)" }}>
+              ✅ Revisá tu email para resetear la contraseña.
+            </div>
+          ) : (
+            <button
+              style={{ background: "none", border: "none", color: "var(--text3)", fontSize: 12, cursor: "pointer" }}
+              onClick={handleForgotPassword}
+              disabled={resetLoading}
+            >
+              {resetLoading ? "Enviando..." : "¿Olvidaste tu contraseña?"}
+            </button>
+          )}
         </div>
       </div>
 
