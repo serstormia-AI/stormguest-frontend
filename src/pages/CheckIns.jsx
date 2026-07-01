@@ -172,6 +172,7 @@ export default function CheckIns() {
     }
 
     return (
+        <>
         {showModal && <NewReservationModal onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); fetchReservations(); }} />}
         <div className="p-8 h-full flex flex-col">
             <div className="mb-8 flex items-center justify-between">
@@ -265,5 +266,6 @@ export default function CheckIns() {
                 })}
             </div>
         </div>
+        </>
     );
 }
