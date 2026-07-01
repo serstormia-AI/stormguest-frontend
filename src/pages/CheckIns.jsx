@@ -112,13 +112,12 @@ export default function CheckIns() {
 
     const fetchReservations = async () => {
         setLoading(true);
-        // Simular que somos el administrador del hotel "demo"
-        const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
-        const { data: hotelData } = await supabaseAdmin
-            .from('hotels')
-            .select('id')
-            .eq('slug', hotelSlug)
-            .single();
+        const hotelRef = localStorage.getItem('hotel_id') || 'demo';
+        let { data: hotelData } = await supabaseAdmin.from('hotels').select('id').eq('slug', hotelRef).maybeSingle();
+        if (!hotelData) {
+            const { data: byId } = await supabaseAdmin.from('hotels').select('id').eq('id', hotelRef).maybeSingle();
+            hotelData = byId;
+        }
 
         if (hotelData) {
             const { data: reservations, error } = await supabaseAdmin
