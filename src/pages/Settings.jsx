@@ -119,36 +119,43 @@ export default function Settings() {
 
   // ── Cargar config al montar ──────────────────────────────────
   useEffect(() => {
+    // Prompt viene de Supabase (concierge_personality), ya cargado en loadHotel
     getSettings()
       .then((data) => {
-        if (data.system_prompt) setPrompt(data.system_prompt);
         setSmtp({
           smtp_host: data.smtp_host || '',
           smtp_port: data.smtp_port || 587,
           smtp_user: data.smtp_user || '',
-          smtp_pass: '',          // nunca viene del servidor
+          smtp_pass: '',
           smtp_from: data.smtp_from || '',
         });
         setStripe({
           stripe_publishable_key: data.stripe_publishable_key || '',
-          stripe_secret_key: '',      // nunca viene del servidor
-          stripe_webhook_secret: '',  // nunca viene del servidor
+          stripe_secret_key: '',
+          stripe_webhook_secret: '',
         });
         setHasStripeSecret(!!data.has_stripe_secret);
         setHasStripeWebhook(!!data.has_stripe_webhook);
       })
-      .catch(() => {
-        // Sin bloquear la UI si falla
-      });
+      .catch(() => {});
   }, []);
+
+  // Cargar prompt desde Supabase cuando hotelId esté disponible
+  useEffect(() => {
+    if (!hotelId) return;
+    supabaseAdmin.from('hotels').select('concierge_personality').eq('id', hotelId).single()
+      .then(({ data }) => { if (data?.concierge_personality) setPrompt(data.concierge_personality); });
+  }, [hotelId]);
 
   // ── Guardar prompt ───────────────────────────────────────────
   async function handleSavePrompt() {
+    if (!hotelId) return;
     setPromptSaving(true);
     setPromptStatus(null);
     try {
-      await updateSettings({ system_prompt: prompt });
-      setPromptStatus({ type: 'success', message: 'Prompt de Julia guardado correctamente.' });
+      const { error } = await supabaseAdmin.from('hotels').update({ concierge_personality: prompt || null }).eq('id', hotelId);
+      if (error) throw error;
+      setPromptStatus({ type: 'success', message: 'Prompt guardado correctamente.' });
     } catch {
       setPromptStatus({ type: 'error', message: 'Error al guardar. Intentá de nuevo.' });
     } finally {
@@ -353,9 +360,9 @@ export default function Settings() {
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-white">Julia — Asistente Virtual</h2>
+            <h2 className="text-lg font-semibold text-white">{hotel.concierge_name || 'Julia'} — Asistente Virtual</h2>
             <p className="text-zinc-400 text-sm mt-0.5">
-              Personalizá cómo Julia responde a tus huéspedes
+              Personalizá cómo {hotel.concierge_name || 'Julia'} responde a tus huéspedes
             </p>
           </div>
           <div className="shrink-0 w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-lg select-none">
