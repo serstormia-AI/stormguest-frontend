@@ -18,8 +18,12 @@ function NewReservationModal({ onClose, onSaved }) {
         }
         setLoading(true);
         try {
-            const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
-            const { data: hotel } = await supabaseAdmin.from('hotels').select('id').eq('slug', hotelSlug).single();
+            const hotelRef = localStorage.getItem('hotel_id') || 'demo';
+            let { data: hotel } = await supabaseAdmin.from('hotels').select('id').eq('slug', hotelRef).maybeSingle();
+            if (!hotel) {
+                const { data: byId } = await supabaseAdmin.from('hotels').select('id').eq('id', hotelRef).maybeSingle();
+                hotel = byId;
+            }
             if (!hotel) throw new Error('Hotel no encontrado');
 
             // Upsert guest by email
