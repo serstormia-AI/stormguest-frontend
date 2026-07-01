@@ -198,7 +198,15 @@ function LoginForm({ onLogin }) {
         .eq('email', emailVal.trim().toLowerCase())
         .single();
       if (!profile) throw new Error('Perfil de usuario no encontrado');
-      return { token: authData.session.access_token, role: profile.role, hotel_id: profile.hotel_id, name: profile.name, email: authData.user.email };
+
+      // Resolve hotel_id UUID → slug so all pages can query by slug
+      let hotelSlug = profile.hotel_id;
+      if (hotelSlug && hotelSlug.includes('-')) {
+        const { data: h } = await supabaseAdmin.from('hotels').select('slug').eq('id', hotelSlug).maybeSingle();
+        if (h?.slug) hotelSlug = h.slug;
+      }
+
+      return { token: authData.session.access_token, role: profile.role, hotel_id: hotelSlug, name: profile.name, email: authData.user.email };
     }
 
     // 2. Fall back to Express (legacy bcrypt users)
