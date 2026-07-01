@@ -52,7 +52,7 @@ export default function Settings() {
     const loadHotel = async () => {
       const slug = localStorage.getItem('hotel_id') || 'demo';
       const { data } = await supabaseAdmin.from('hotels')
-        .select('id, name, primary_color, primary_color_light, logo_url')
+        .select('id, name, primary_color, primary_color_light, logo_url, concierge_name')
         .eq('slug', slug).single();
       if (data) {
         setHotelId(data.id);
@@ -61,6 +61,7 @@ export default function Settings() {
           primary_color: data.primary_color || '#C9964A',
           primary_color_light: data.primary_color_light || '#E2B96E',
           logo_url: data.logo_url || '',
+          concierge_name: data.concierge_name || 'Julia',
         });
       }
     };
@@ -76,6 +77,7 @@ export default function Settings() {
       primary_color: hotel.primary_color,
       primary_color_light: hotel.primary_color_light,
       logo_url: hotel.logo_url || null,
+      concierge_name: hotel.concierge_name || 'Julia',
     }).eq('id', hotelId);
     setHotelSaving(false);
     setHotelStatus(error
@@ -292,6 +294,13 @@ export default function Settings() {
           </div>
 
           {/* Logo URL */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-zinc-300">Nombre del concierge IA</label>
+            <input type="text" value={hotel.concierge_name || ''}
+              onChange={e => setHotel(h => ({ ...h, concierge_name: e.target.value }))}
+              placeholder="Ej: Julia, Brown, Pedro..."
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-600" />
+          </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-zinc-300">URL del logo</label>
             <div className="flex items-center gap-3">

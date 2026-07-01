@@ -1,10 +1,106 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, supabaseAdmin } from '../lib/supabase';
-import { Loader2, User, Key, Calendar, ArrowRight } from 'lucide-react';
+import { Loader2, User, Key, Calendar, ArrowRight, Plus, X } from 'lucide-react';
+
+function NewReservationModal({ onClose, onSaved }) {
+    const [form, setForm] = useState({ name: '', email: '', room: '', checkIn: '', checkOut: '' });
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        if (!form.name || !form.email || !form.checkIn || !form.checkOut) {
+            setError('Nombre, email y fechas son requeridos');
+            return;
+        }
+        setLoading(true);
+        try {
+            const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
+            const { data: hotel } = await supabaseAdmin.from('hotels').select('id').eq('slug', hotelSlug).single();
+            if (!hotel) throw new Error('Hotel no encontrado');
+
+            // Upsert guest by email
+            let { data: guest } = await supabaseAdmin.from('guests').select('id').eq('email', form.email.trim().toLowerCase()).eq('hotel_id', hotel.id).maybeSingle();
+            if (!guest) {
+                const { data: newGuest, error: gErr } = await supabaseAdmin.from('guests').insert({ name: form.name.trim(), email: form.email.trim().toLowerCase(), hotel_id: hotel.id }).select('id').single();
+                if (gErr) throw new Error(gErr.message);
+                guest = newGuest;
+            }
+
+            const { error: rErr } = await supabaseAdmin.from('reservations').insert({
+                guest_id: guest.id,
+                hotel_id: hotel.id,
+                room_number: form.room.trim() || null,
+                check_in: form.checkIn,
+                check_out: form.checkOut,
+                status: 'pending',
+            });
+            if (rErr) throw new Error(rErr.message);
+
+            onSaved();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl">
+                <div className="flex items-center justify-between p-5 border-b border-zinc-800">
+                    <h2 className="font-bold text-lg">Nueva Reserva</h2>
+                    <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-5 space-y-4">
+                    <div>
+                        <label className="block text-xs text-zinc-400 mb-1 uppercase tracking-wide">Nombre del huésped</label>
+                        <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Juan Pérez"
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div>
+                        <label className="block text-xs text-zinc-400 mb-1 uppercase tracking-wide">Email</label>
+                        <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="juan@email.com"
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div>
+                        <label className="block text-xs text-zinc-400 mb-1 uppercase tracking-wide">Habitación</label>
+                        <input value={form.room} onChange={e => set('room', e.target.value)} placeholder="101"
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs text-zinc-400 mb-1 uppercase tracking-wide">Check-in</label>
+                            <input type="date" value={form.checkIn} onChange={e => set('checkIn', e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-zinc-400 mb-1 uppercase tracking-wide">Check-out</label>
+                            <input type="date" value={form.checkOut} onChange={e => set('checkOut', e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                        </div>
+                    </div>
+                    {error && <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2">{error}</p>}
+                    <div className="flex gap-3 pt-1">
+                        <button type="button" onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 hover:text-white text-sm transition-colors">Cancelar</button>
+                        <button type="submit" disabled={loading} className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                            Crear reserva
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
 
 export default function CheckIns() {
     const [reservations, setReservations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
 
     useEffect(() => {
         fetchReservations();
@@ -76,10 +172,16 @@ export default function CheckIns() {
     }
 
     return (
+        {showModal && <NewReservationModal onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); fetchReservations(); }} />}
         <div className="p-8 h-full flex flex-col">
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold">Control de Recepción</h1>
-                <p className="text-zinc-400 mt-1">Gestiona el flujo de huéspedes en tiempo real.</p>
+            <div className="mb-8 flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold">Control de Recepción</h1>
+                    <p className="text-zinc-400 mt-1">Gestiona el flujo de huéspedes en tiempo real.</p>
+                </div>
+                <button onClick={() => setShowModal(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-xl text-sm transition-colors">
+                    <Plus className="w-4 h-4" /> Nueva Reserva
+                </button>
             </div>
 
             {/* Status Board */}
