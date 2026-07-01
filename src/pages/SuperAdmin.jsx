@@ -368,6 +368,7 @@ function HotelModal({ hotel, onClose, onSaved }) {
     const isEdit = !!hotel;
     const [name, setName] = useState(hotel?.name || '');
     const [slug, setSlug] = useState(hotel?.slug || '');
+    const [concierge, setConcierge] = useState(hotel?.concierge_name || 'Julia');
     const [slugManual, setSlugManual] = useState(!!hotel?.slug);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -391,7 +392,7 @@ function HotelModal({ hotel, onClose, onSaved }) {
         }
         setLoading(true);
         try {
-            const payload = { name: name.trim(), slug: slug.trim() };
+            const payload = { name: name.trim(), slug: slug.trim(), concierge_name: concierge.trim() || 'Julia' };
             if (isEdit) {
                 const { error } = await supabaseAdmin.from('hotels').update(payload).eq('id', hotel.id);
                 if (error) throw new Error(error.message);
@@ -427,6 +428,14 @@ function HotelModal({ hotel, onClose, onSaved }) {
                         onChange={handleSlugChange}
                     />
                     <p className="text-xs text-zinc-500 mt-1">Identificador URL único. Se genera desde el nombre.</p>
+                </Field>
+                <Field label="Nombre del concierge IA">
+                    <input
+                        className={inputCls}
+                        placeholder="Ej: Julia, Pedro, Brown..."
+                        value={concierge}
+                        onChange={e => setConcierge(e.target.value)}
+                    />
                 </Field>
                 <ErrorMsg message={error} />
                 <div className="flex gap-3 pt-1">
