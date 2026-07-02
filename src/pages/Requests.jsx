@@ -14,14 +14,13 @@ export default function Requests() {
 
     useEffect(() => {
         const init = async () => {
-            const hotelSlug = localStorage.getItem('hotel_id') || 'demo';
-            const { data: hotel, error } = await supabaseAdmin
-                .from('hotels').select('id').eq('slug', hotelSlug).single();
-            if (error) {
-                console.error('[Requests] Hotel lookup failed:', error.message, '— supabaseAdmin may be using anon key');
-                setLoading(false);
-                return;
+            const hotelRef = localStorage.getItem('hotel_id') || 'demo';
+            let { data: hotel } = await supabaseAdmin.from('hotels').select('id').eq('slug', hotelRef).maybeSingle();
+            if (!hotel) {
+                const { data: byId } = await supabaseAdmin.from('hotels').select('id').eq('id', hotelRef).maybeSingle();
+                hotel = byId;
             }
+            if (!hotel) { setLoading(false); return; }
             if (hotel) {
                 setHotelId(hotel.id);
                 await fetchRequests(hotel.id);
