@@ -1,6 +1,113 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, supabaseAdmin } from '../lib/supabase';
-import { Loader2, User, Key, Calendar, ArrowRight, Plus, X } from 'lucide-react';
+import { Loader2, User, Key, Calendar, ArrowRight, Plus, X, ShoppingBag } from 'lucide-react';
+
+const CATEGORY_LABELS = {
+    room_service: '🍽 Room Service',
+    spa: '💆 Spa',
+    actividad: '🏄 Actividades',
+    transporte: '🚗 Transporte',
+    housekeeping: '🧹 Housekeeping',
+    otro: '📦 Otro',
+};
+
+function NewOrderModal({ guest, hotelId, onClose, onSaved }) {
+    const [catalog, setCatalog] = useState([]);
+    const [selectedId, setSelectedId] = useState('');
+    const [notes, setNotes] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [loadingCatalog, setLoadingCatalog] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        supabaseAdmin.from('experiences').select('id, title, description, price, category')
+            .eq('hotel_id', hotelId).order('category').order('title')
+            .then(({ data }) => { setCatalog(data || []); setLoadingCatalog(false); });
+    }, [hotelId]);
+
+    const selected = catalog.find(e => e.id === selectedId);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!selectedId) { setError('Seleccioná un ítem'); return; }
+        setLoading(true);
+        const { error: err } = await supabaseAdmin.from('requests').insert({
+            hotel_id: hotelId,
+            guest_id: guest.id,
+            experience_id: selectedId,
+            total_price: selected?.price ?? 0,
+            status: 'pending',
+            notes: notes.trim() || null,
+        });
+        setLoading(false);
+        if (err) { setError(err.message); return; }
+        onSaved();
+    };
+
+    const grouped = catalog.reduce((acc, item) => {
+        const cat = item.category || 'otro';
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(item);
+        return acc;
+    }, {});
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl">
+                <div className="flex items-center justify-between p-5 border-b border-zinc-800">
+                    <div>
+                        <h2 className="font-bold text-lg">Nuevo Pedido</h2>
+                        <p className="text-xs text-zinc-400 mt-0.5">Huésped: {guest.name}</p>
+                    </div>
+                    <button onClick={onClose} className="text-zinc-500 hover:text-white"><X className="w-5 h-5" /></button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-5 space-y-4">
+                    <div>
+                        <label className="block text-xs text-zinc-400 mb-1 uppercase tracking-wide">Ítem del catálogo</label>
+                        {loadingCatalog ? (
+                            <div className="flex items-center gap-2 text-zinc-500 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Cargando catálogo...</div>
+                        ) : catalog.length === 0 ? (
+                            <p className="text-zinc-500 text-sm">Sin ítems en el catálogo. Cargá primero desde Catálogo.</p>
+                        ) : (
+                            <select value={selectedId} onChange={e => setSelectedId(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+                                <option value="">— Seleccioná un ítem —</option>
+                                {Object.entries(grouped).map(([cat, items]) => (
+                                    <optgroup key={cat} label={CATEGORY_LABELS[cat] || cat}>
+                                        {items.map(item => (
+                                            <option key={item.id} value={item.id}>{item.title} — ${item.price}</option>
+                                        ))}
+                                    </optgroup>
+                                ))}
+                            </select>
+                        )}
+                    </div>
+                    {selected && (
+                        <div className="bg-zinc-800 rounded-xl px-4 py-3 text-sm">
+                            <p className="text-zinc-300">{selected.description}</p>
+                            <p className="text-emerald-400 font-bold mt-1">${selected.price}</p>
+                        </div>
+                    )}
+                    <div>
+                        <label className="block text-xs text-zinc-400 mb-1 uppercase tracking-wide">Notas (opcional)</label>
+                        <input value={notes} onChange={e => setNotes(e.target.value)}
+                            placeholder="Sin azúcar, habitación 201..."
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    {error && <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2">{error}</p>}
+                    <div className="flex gap-3 pt-1">
+                        <button type="button" onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 text-sm">Cancelar</button>
+                        <button type="submit" disabled={loading || !selectedId}
+                            className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                            Crear pedido
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
 
 function NewReservationModal({ onClose, onSaved }) {
     const [form, setForm] = useState({ name: '', email: '', room: '', checkIn: '', checkOut: '' });
@@ -105,6 +212,8 @@ export default function CheckIns() {
     const [reservations, setReservations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [orderTarget, setOrderTarget] = useState(null); // { guest, hotelId }
+    const [dbHotelId, setDbHotelId] = useState('');
 
     useEffect(() => {
         fetchReservations();
@@ -120,6 +229,7 @@ export default function CheckIns() {
         }
 
         if (hotelData) {
+            setDbHotelId(hotelData.id);
             const { data: reservations, error } = await supabaseAdmin
                 .from('reservations')
                 .select('id, room_number, check_in, check_out, status, guest_id')
@@ -177,6 +287,7 @@ export default function CheckIns() {
     return (
         <>
         {showModal && <NewReservationModal onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); fetchReservations(); }} />}
+        {orderTarget && <NewOrderModal guest={orderTarget.guest} hotelId={orderTarget.hotelId} onClose={() => setOrderTarget(null)} onSaved={() => { setOrderTarget(null); }} />}
         <div className="p-8 h-full flex flex-col">
             <div className="mb-8 flex items-center justify-between">
                 <div>
@@ -234,25 +345,27 @@ export default function CheckIns() {
                                         </div>
 
                                         {/* Actions */}
-                                        <div className="flex justify-end border-t border-zinc-800 pt-3">
+                                        <div className="flex gap-2 border-t border-zinc-800 pt-3">
                                             {column.id === 'pending' && (
-                                                <button 
-                                                    onClick={() => updateStatus(res.id, 'checked_in')}
-                                                    className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition-colors w-full"
-                                                >
-                                                    Dar Ingreso (In House)
+                                                <button onClick={() => updateStatus(res.id, 'checked_in')}
+                                                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition-colors">
+                                                    Dar Ingreso
                                                 </button>
                                             )}
                                             {column.id === 'checked_in' && (
-                                                <button 
-                                                    onClick={() => updateStatus(res.id, 'checked_out')}
-                                                    className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition-colors w-full border border-zinc-700"
-                                                >
-                                                    Realizar Check-out
+                                                <button onClick={() => updateStatus(res.id, 'checked_out')}
+                                                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition-colors border border-zinc-700">
+                                                    Check-out
                                                 </button>
                                             )}
                                             {column.id === 'checked_out' && (
-                                                <span className="text-xs text-zinc-500 italic text-center w-full block">Estadía finalizada</span>
+                                                <span className="flex-1 text-xs text-zinc-500 italic text-center">Estadía finalizada</span>
+                                            )}
+                                            {res.guest && column.id !== 'checked_out' && (
+                                                <button onClick={() => setOrderTarget({ guest: res.guest, hotelId: dbHotelId })}
+                                                    className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-xs font-bold py-1.5 px-3 rounded-lg transition-colors flex items-center gap-1">
+                                                    <ShoppingBag className="w-3 h-3" /> Pedir
+                                                </button>
                                             )}
                                         </div>
                                     </div>
